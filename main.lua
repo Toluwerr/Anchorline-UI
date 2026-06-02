@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.5.0"
+Anchorline.Version = "3.6.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.IconStyle = "Lucide"
@@ -342,11 +342,24 @@ local function setCornerRadius(instance, radius)
 	end
 end
 
+local function resolveIconVector2(value)
+	if typeof(value) == "Vector2" then
+		return value
+	end
+	if type(value) == "table" then
+		local x = value.X or value.x or value[1] or 0
+		local y = value.Y or value.y or value[2] or 0
+		return Vector2.new(tonumber(x) or 0, tonumber(y) or 0)
+	end
+	return nil
+end
+
 local function resolveIconAssetFromTable(value)
 	if type(value) ~= "table" then
 		return nil
 	end
-	local image = value.Image or value.Url or value.Asset or value.AssetId or value.Id or value.image or value.asset or value.assetId or value.id
+
+	local image = value.Image or value.Url or value.URL or value.Asset or value.AssetId or value.Id or value.image or value.url or value.asset or value.assetId or value.id
 	if typeof(image) == "number" then
 		image = "rbxassetid://" .. tostring(image)
 	elseif isNumericAssetString(image) then
@@ -355,18 +368,27 @@ local function resolveIconAssetFromTable(value)
 	if type(image) ~= "string" or image == "" then
 		return nil
 	end
+
 	local data = {Image = image}
-	if typeof(value.ImageRectOffset) == "Vector2" then
-		data.ImageRectOffset = value.ImageRectOffset
-	elseif type(value.ImageRectOffset) == "table" then
-		data.ImageRectOffset = Vector2.new(value.ImageRectOffset[1] or 0, value.ImageRectOffset[2] or 0)
+	local rectOffset = resolveIconVector2(value.ImageRectOffset or value.imageRectOffset or value.RectOffset or value.rectOffset)
+	local rectSize = resolveIconVector2(value.ImageRectSize or value.imageRectSize or value.RectSize or value.rectSize)
+	if rectOffset then
+		data.ImageRectOffset = rectOffset
 	end
-	if typeof(value.ImageRectSize) == "Vector2" then
-		data.ImageRectSize = value.ImageRectSize
-	elseif type(value.ImageRectSize) == "table" then
-		data.ImageRectSize = Vector2.new(value.ImageRectSize[1] or 0, value.ImageRectSize[2] or 0)
+	if rectSize then
+		data.ImageRectSize = rectSize
 	end
 	return data
+end
+
+local function applyIconAssetToImageLabel(imageLabel, asset)
+	if not imageLabel or not asset or type(asset.Image) ~= "string" or asset.Image == "" then
+		return false
+	end
+	imageLabel.Image = asset.Image
+	imageLabel.ImageRectOffset = asset.ImageRectOffset or Vector2.new(0, 0)
+	imageLabel.ImageRectSize = asset.ImageRectSize or Vector2.new(0, 0)
+	return true
 end
 
 local function providerHasLucideApi(provider)
@@ -380,6 +402,54 @@ local function requireLucideModule(module)
 	local ok, provider = pcall(require, module)
 	if ok and providerHasLucideApi(provider) then
 		return provider
+	end
+	return nil
+end
+
+local function resolveLucideProviderCandidate(candidate)
+	if providerHasLucideApi(candidate) then
+		return candidate
+	end
+	if typeof(candidate) ~= "Instance" then
+		return nil
+	end
+	if candidate:IsA("ModuleScript") then
+		return requireLucideModule(candidate)
+	end
+	local directNames = {"Lucide", "LucideIcons", "lucide-roblox", "lucide-icons", "init", "Init", "main", "Main"}
+	for _, name in ipairs(directNames) do
+		local child = candidate:FindFirstChild(name)
+		local provider = resolveLucideProviderCandidate(child)
+		if provider then
+			return provider
+		end
+	end
+	local scanned = 0
+	for _, descendant in ipairs(candidate:GetDescendants()) do
+		scanned += 1
+		if scanned > 80 then break end
+		if descendant:IsA("ModuleScript") then
+			local lowerName = descendant.Name:lower()
+			if lowerName:find("lucide", 1, true) then
+				local provider = requireLucideModule(descendant)
+				if provider then
+					return provider
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function findReplicatedStorageLucideProvider()
+	if not ReplicatedStorage then
+		return nil
+	end
+	for _, name in ipairs({"Lucide", "LucideIcons", "lucide-roblox"}) do
+		local provider = resolveLucideProviderCandidate(ReplicatedStorage:FindFirstChild(name))
+		if provider then
+			return provider
+		end
 	end
 	return nil
 end
@@ -717,38 +787,49 @@ function Window:_resolveIcon(icon)
 	if tableIcon then
 		return tableIcon
 	end
-	if type(icon) == "string" then
-		if isNumericAssetString(icon) then
-			return {Image = "rbxassetid://" .. icon}
-		end
-		if isRobloxImagePath(icon) then
-			return {Image = icon}
-		end
-		self.IconProvider = self.IconProvider or findLucideProvider(Anchorline.LucideProvider or Anchorline.IconProvider)
-		local provider = self.IconProvider
-		if provider then
-			local parsed = getLucideAssetFromProvider(provider, icon, 48)
-			if parsed then
-				return parsed
-			end
+	if type(icon) ~= "string" then
+		return nil
+	end
+	if isNumericAssetString(icon) then
+		return {Image = "rbxassetid://" .. icon}
+	end
+	if isRobloxImagePath(icon) then
+		return {Image = icon}
+	end
+
+	local providers = {}
+	local seen = {}
+	local function addProvider(provider)
+		local resolved = resolveLucideProviderCandidate(provider)
+		if resolved and not seen[resolved] then
+			seen[resolved] = true
+			providers[#providers + 1] = resolved
 		end
 	end
+
+	addProvider(Anchorline.IconProvider)
+	addProvider(self.IconProvider)
+	addProvider(Anchorline.LucideProvider)
+	addProvider(self.LucideProvider)
+	addProvider(findReplicatedStorageLucideProvider())
+	addProvider(findLucideProvider(nil))
+
+	for _, provider in ipairs(providers) do
+		local parsed = getLucideAssetFromProvider(provider, icon, 48)
+		if parsed then
+			self.IconProvider = provider
+			self.LucideProvider = provider
+			Anchorline.IconProvider = Anchorline.IconProvider or provider
+			Anchorline.LucideProvider = Anchorline.LucideProvider or provider
+			return parsed
+		end
+	end
+
 	return nil
 end
 
 local function createTextFallbackIcon(parent, iconName)
-	local initial = tostring(iconName or "A"):match("%w") or "A"
-	local label = new("TextLabel", {
-		BackgroundTransparency = 1,
-		Size = UDim2.fromScale(1, 1),
-		Font = Enum.Font.GothamBold,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		TextYAlignment = Enum.TextYAlignment.Center,
-		Text = tostring(initial):sub(1, 1):upper(),
-		Parent = parent
-	})
-	return {label}
+	return {}
 end
 
 function getLucideIconCandidates(icon)
@@ -1195,18 +1276,8 @@ local function createVectorIcon(parent, iconName)
 		rect(6, 4, 3, 12, 1)
 		rect(12, 4, 3, 12, 1)
 	else
-		local initial = tostring(iconName or name or "A"):match("%w") or "A"
-		local label = new("TextLabel", {
-			BackgroundTransparency = 1,
-			Size = UDim2.fromScale(1, 1),
-			Font = Enum.Font.GothamBold,
-			TextSize = 12,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			TextYAlignment = Enum.TextYAlignment.Center,
-			Text = tostring(initial):sub(1, 1):upper(),
-			Parent = parent
-		})
-		shapes[#shapes + 1] = label
+		-- Unknown icon names intentionally render no letter fallback.
+		-- Valid icons should resolve through Lucide or through a Roblox image asset.
 	end
 	return shapes
 end
@@ -2153,13 +2224,7 @@ function Window:CreateTab(name, icon, description)
 		Parent = iconBox
 	})
 	if tab.IconAsset then
-		iconImage.Image = tab.IconAsset.Image
-		if tab.IconAsset.ImageRectOffset then
-			iconImage.ImageRectOffset = tab.IconAsset.ImageRectOffset
-		end
-		if tab.IconAsset.ImageRectSize then
-			iconImage.ImageRectSize = tab.IconAsset.ImageRectSize
-		end
+		applyIconAssetToImageLabel(iconImage, tab.IconAsset)
 	end
 	local iconHolder = new("Frame", {
 		Name = "VectorIcon",
@@ -2170,6 +2235,9 @@ function Window:CreateTab(name, icon, description)
 		Parent = iconBox
 	})
 	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
+	if #iconShapes == 0 then
+		iconHolder.Visible = false
+	end
 	local iconLabel = nil
 	local titleLabel = new("TextLabel", {
 		Name = "Title",
@@ -4104,12 +4172,10 @@ function Tab:CreateHero(options)
 			Position = UDim2.fromOffset(12, 12),
 			Size = UDim2.fromOffset(24, 24),
 			ScaleType = Enum.ScaleType.Fit,
-			Image = asset.Image,
 			ImageColor3 = options.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, "Accent"),
 			Parent = iconBox
 		})
-		if asset.ImageRectOffset then image.ImageRectOffset = asset.ImageRectOffset end
-		if asset.ImageRectSize then image.ImageRectSize = asset.ImageRectSize end
+		applyIconAssetToImageLabel(image, asset)
 	else
 		local vector = new("Frame", {BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(20, 20), Parent = iconBox})
 		local shapes = createVectorIcon(vector, options.Icon or titleText)
@@ -4404,9 +4470,7 @@ function Tab:CreateImageCard(options)
 	local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 10), Size = UDim2.new(1, -20, 1, -20), ScaleType = options.ScaleType or Enum.ScaleType.Fit, Parent = box})
 	local asset = window:_resolveIcon(options.Image or options.Icon or options.Asset)
 	if asset then
-		image.Image = asset.Image
-		if asset.ImageRectOffset then image.ImageRectOffset = asset.ImageRectOffset end
-		if asset.ImageRectSize then image.ImageRectSize = asset.ImageRectSize end
+		applyIconAssetToImageLabel(image, asset)
 	end
 	local controller = {Image = image, Frame = frame}
 	function controller:SetImage(assetValue)
@@ -4517,9 +4581,8 @@ function Tab:CreateToolbar(options)
 		window:_track(button, {BackgroundColor3 = tool.Primary and "Accent" or "Surface", TextColor3 = tool.Primary and "AccentText" or "Text"})
 		local asset = window:_resolveIcon(tool.Icon or tool.Image)
 		if asset then
-			local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(18, 18), ScaleType = Enum.ScaleType.Fit, Image = asset.Image, ImageColor3 = tool.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, tool.Primary and "AccentText" or "Accent"), Parent = button})
-			if asset.ImageRectOffset then image.ImageRectOffset = asset.ImageRectOffset end
-			if asset.ImageRectSize then image.ImageRectSize = asset.ImageRectSize end
+			local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(18, 18), ScaleType = Enum.ScaleType.Fit, ImageColor3 = tool.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, tool.Primary and "AccentText" or "Accent"), Parent = button})
+			applyIconAssetToImageLabel(image, asset)
 		end
 		local textLabel = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(asset and 34 or 10, 0), Size = UDim2.new(1, asset and -42 or -20, 1, 0), Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = label, Parent = button})
 		window:_track(textLabel, {TextColor3 = tool.Primary and "AccentText" or "Text"})
@@ -5708,12 +5771,10 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 			Size = UDim2.fromOffset(size, size),
 			Position = UDim2.fromOffset(0, 0),
 			ScaleType = Enum.ScaleType.Fit,
-			Image = asset.Image,
 			ImageColor3 = color or getThemeValue(window, "Accent"),
 			Parent = parent
 		})
-		if asset.ImageRectOffset then image.ImageRectOffset = asset.ImageRectOffset end
-		if asset.ImageRectSize then image.ImageRectSize = asset.ImageRectSize end
+		applyIconAssetToImageLabel(image, asset)
 		return {Root = image, Shapes = {image}}
 	end
 	local holder = new("Frame", {
@@ -5958,9 +6019,8 @@ function Tab:CreateProfileCard(options)
 	window:_track(avatar, {BackgroundColor3 = "AccentSoft"})
 	local asset = window:_resolveIcon(options.Avatar or options.Image)
 	if asset then
-		local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(50, 50), ScaleType = Enum.ScaleType.Crop, Image = asset.Image, Parent = avatar}, {corner(17)})
-		if asset.ImageRectOffset then image.ImageRectOffset = asset.ImageRectOffset end
-		if asset.ImageRectSize then image.ImageRectSize = asset.ImageRectSize end
+		local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(50, 50), ScaleType = Enum.ScaleType.Crop, Parent = avatar}, {corner(17)})
+		applyIconAssetToImageLabel(image, asset)
 	else
 		local initials = tostring(options.Initials or string.sub(name, 1, 2)):upper()
 		new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Font = Enum.Font.GothamBold, TextSize = 18, Text = initials, TextColor3 = getThemeValue(window, "Accent"), Parent = avatar})
