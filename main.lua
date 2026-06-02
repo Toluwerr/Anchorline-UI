@@ -1,9 +1,16 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.3.2"
+Anchorline.Version = "2.4.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
+Anchorline.Motion = {
+	Micro = 0.16,
+	Fast = 0.24,
+	Base = 0.34,
+	Panel = 0.46,
+	Exit = 0.28
+}
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -12,6 +19,7 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -51,10 +59,19 @@ local function new(className, properties, children)
 end
 
 local function tween(object, time, properties, easingStyle, easingDirection)
-	local info = TweenInfo.new(time or 0.28, easingStyle or Enum.EasingStyle.Quint, easingDirection or Enum.EasingDirection.Out)
-	local t = TweenService:Create(object, info, properties)
-	t:Play()
-	return t
+	if not object or object.Parent == nil then
+		return nil
+	end
+	local info = TweenInfo.new(time or Anchorline.Motion.Base, easingStyle or Enum.EasingStyle.Quint, easingDirection or Enum.EasingDirection.Out)
+	local ok, t = pcall(TweenService.Create, TweenService, object, info, properties)
+	if ok and t then
+		t:Play()
+		return t
+	end
+	for property, value in pairs(properties) do
+		pcall(function() object[property] = value end)
+	end
+	return nil
 end
 
 local function corner(radius)
@@ -133,13 +150,34 @@ local function isRobloxImagePath(value)
 	)
 end
 
+local function normalizeIconName(value)
+	if type(value) ~= "string" then
+		return ""
+	end
+	return value:lower():gsub("%s+", "-"):gsub("_", "-")
+end
+
+local function isNumericAssetString(value)
+	return type(value) == "string" and value:match("^%d+$") ~= nil
+end
+
+local function setCornerRadius(instance, radius)
+	if not instance then return end
+	local found = instance:FindFirstChildOfClass("UICorner")
+	if found then
+		found.CornerRadius = UDim.new(0, radius)
+	end
+end
+
 local function resolveIconAssetFromTable(value)
 	if type(value) ~= "table" then
 		return nil
 	end
-	local image = value.Image or value.Url or value.Asset or value.AssetId or value.Id
+	local image = value.Image or value.Url or value.Asset or value.AssetId or value.Id or value.image or value.asset or value.assetId or value.id
 	if typeof(image) == "number" then
 		image = "rbxassetid://" .. tostring(image)
+	elseif isNumericAssetString(image) then
+		image = "rbxassetid://" .. image
 	end
 	if type(image) ~= "string" or image == "" then
 		return nil
@@ -225,7 +263,9 @@ Anchorline.Themes = {
 		Success = Color3.fromRGB(83, 135, 96),
 		Warning = Color3.fromRGB(165, 122, 63),
 		Danger = Color3.fromRGB(168, 76, 70),
-		Overlay = Color3.fromRGB(73, 68, 62)
+		Overlay = Color3.fromRGB(73, 68, 62),
+		GlassHighlight = Color3.fromRGB(255, 255, 255),
+		GlassShade = Color3.fromRGB(221, 216, 205)
 	},
 	Ledger = {
 		Background = Color3.fromRGB(244, 242, 237),
@@ -380,18 +420,141 @@ function Window:_resolveIcon(icon)
 		return tableIcon
 	end
 	if type(icon) == "string" then
+		if isNumericAssetString(icon) then
+			return {Image = "rbxassetid://" .. icon}
+		end
 		if isRobloxImagePath(icon) then
 			return {Image = icon}
 		end
 		local provider = self.IconProvider
-		if provider and type(provider.GetAsset) == "function" then
-			local ok, asset = pcall(provider.GetAsset, icon, 48)
-			if ok then
-				return resolveIconAssetFromTable(asset)
+		if provider then
+			local candidates = {icon, normalizeIconName(icon)}
+			for _, candidate in ipairs(candidates) do
+				if type(provider.GetAsset) == "function" then
+					local attempts = {
+						function() return provider.GetAsset(candidate, 48) end,
+						function() return provider:GetAsset(candidate, 48) end,
+						function() return provider.GetAsset(candidate) end,
+						function() return provider:GetAsset(candidate) end
+					}
+					for _, attempt in ipairs(attempts) do
+						local ok, asset = pcall(attempt)
+						if ok then
+							if type(asset) == "string" then
+								if isNumericAssetString(asset) then
+									return {Image = "rbxassetid://" .. asset}
+								elseif isRobloxImagePath(asset) then
+									return {Image = asset}
+								end
+							end
+							local resolved = resolveIconAssetFromTable(asset)
+							if resolved then
+								return resolved
+							end
+						end
+					end
+				end
 			end
 		end
 	end
 	return nil
+end
+
+local function createVectorIcon(parent, iconName)
+	local name = normalizeIconName(iconName)
+	local shapes = {}
+	local function shape(className, props, children)
+		props = props or {}
+		props.BackgroundTransparency = props.BackgroundTransparency or 0
+		props.BorderSizePixel = 0
+		props.Parent = parent
+		local object = new(className or "Frame", props, children)
+		shapes[#shapes + 1] = object
+		return object
+	end
+	local function line(x, y, w, h, rotation, r)
+		return shape("Frame", {
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(w, h),
+			Rotation = rotation or 0
+		}, {corner(r or math.max(1, math.floor(h / 2)))})
+	end
+	local function dot(x, y, size)
+		return shape("Frame", {
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(size, size)
+		}, {corner(math.floor(size / 2))})
+	end
+	if name == "esp" or name == "eye" or name == "visuals" then
+		line(2, 9, 16, 2, 0, 1)
+		line(4, 5, 12, 2, 24, 1)
+		line(4, 13, 12, 2, -24, 1)
+		dot(8, 8, 4)
+	elseif name == "home" or name == "main" then
+		line(4, 9, 12, 2, 0, 1)
+		line(5, 8, 8, 2, -40, 1)
+		line(8, 8, 8, 2, 40, 1)
+		line(5, 11, 2, 6, 0, 1)
+		line(13, 11, 2, 6, 0, 1)
+		line(5, 16, 10, 2, 0, 1)
+	elseif name == "settings" or name == "gear" or name == "config" then
+		dot(8, 8, 4)
+		line(9, 1, 2, 5, 0, 1)
+		line(9, 14, 2, 5, 0, 1)
+		line(1, 9, 5, 2, 0, 1)
+		line(14, 9, 5, 2, 0, 1)
+		line(4, 4, 4, 2, 45, 1)
+		line(12, 4, 4, 2, -45, 1)
+		line(4, 14, 4, 2, -45, 1)
+		line(12, 14, 4, 2, 45, 1)
+	elseif name == "players" or name == "user" or name == "users" then
+		dot(4, 4, 6)
+		line(2, 12, 10, 5, 0, 3)
+		dot(12, 6, 4)
+		line(11, 13, 7, 4, 0, 2)
+	elseif name == "target" or name == "aim" then
+		line(9, 0, 2, 5, 0, 1)
+		line(9, 15, 2, 5, 0, 1)
+		line(0, 9, 5, 2, 0, 1)
+		line(15, 9, 5, 2, 0, 1)
+		dot(7, 7, 6)
+	elseif name == "shield" or name == "security" then
+		line(5, 3, 10, 2, 0, 1)
+		line(5, 3, 2, 9, 0, 1)
+		line(13, 3, 2, 9, 0, 1)
+		line(7, 13, 6, 2, -20, 1)
+		line(7, 13, 6, 2, 20, 1)
+	elseif name == "bolt" or name == "power" then
+		line(10, 1, 3, 10, 28, 1)
+		line(6, 9, 8, 3, 0, 1)
+		line(7, 9, 3, 10, 28, 1)
+	elseif name == "folder" or name == "files" then
+		line(2, 5, 7, 2, 0, 1)
+		line(2, 7, 16, 2, 0, 1)
+		line(2, 9, 2, 8, 0, 1)
+		line(16, 9, 2, 8, 0, 1)
+		line(2, 16, 16, 2, 0, 1)
+	elseif name == "book" or name == "docs" then
+		line(4, 3, 2, 14, 0, 1)
+		line(6, 3, 10, 2, 0, 1)
+		line(6, 16, 10, 2, 0, 1)
+		line(15, 3, 2, 15, 0, 1)
+		line(8, 7, 6, 1, 0, 1)
+		line(8, 10, 6, 1, 0, 1)
+	else
+		local label = new("TextLabel", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			Font = Enum.Font.GothamBold,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextYAlignment = Enum.TextYAlignment.Center,
+			Text = tostring(iconName or "?"):sub(1, 1):upper(),
+			Parent = parent
+		})
+		shapes[#shapes + 1] = label
+	end
+	return shapes
 end
 
 function Window:_styleTabButton(tab)
@@ -401,19 +564,19 @@ function Window:_styleTabButton(tab)
 	local active = self.ActiveTab == tab
 	local iconColor = active and getThemeValue(self, "Accent") or getThemeValue(self, "TextFaint")
 	if active then
-		tween(tab.Button, 0.18, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint)
+		tween(tab.Button, 0.28, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint)
 		tab.ButtonStroke.Color = getThemeValue(self, "Stroke")
 		tab.ButtonTitle.TextColor3 = getThemeValue(self, "Text")
 		if tab.ButtonAccent then
 			tab.ButtonAccent.BackgroundColor3 = getThemeValue(self, "Accent")
-			tween(tab.ButtonAccent, 0.2, {BackgroundTransparency = 0, Size = UDim2.new(0, 4, 1, -12)}, Enum.EasingStyle.Quint)
+			tween(tab.ButtonAccent, 0.3, {BackgroundTransparency = 0, Size = UDim2.new(0, 4, 1, -12)}, Enum.EasingStyle.Quint)
 		end
 	else
-		tween(tab.Button, 0.18, {BackgroundColor3 = getThemeValue(self, "Panel")}, Enum.EasingStyle.Quint)
+		tween(tab.Button, 0.28, {BackgroundColor3 = getThemeValue(self, "Panel")}, Enum.EasingStyle.Quint)
 		tab.ButtonStroke.Color = getThemeValue(self, "StrokeSoft")
 		tab.ButtonTitle.TextColor3 = getThemeValue(self, "TextMuted")
 		if tab.ButtonAccent then
-			tween(tab.ButtonAccent, 0.16, {BackgroundTransparency = 1, Size = UDim2.new(0, 3, 1, -16)}, Enum.EasingStyle.Quint)
+			tween(tab.ButtonAccent, 0.24, {BackgroundTransparency = 1, Size = UDim2.new(0, 3, 1, -16)}, Enum.EasingStyle.Quint)
 		end
 	end
 	if tab.ButtonIcon then
@@ -422,6 +585,15 @@ function Window:_styleTabButton(tab)
 	if tab.ButtonIconImage then
 		tab.ButtonIconImage.ImageColor3 = iconColor
 		tab.ButtonIconImage.ImageTransparency = active and 0 or 0.18
+	end
+	if tab.ButtonIconShapes then
+		for _, shape in ipairs(tab.ButtonIconShapes) do
+			if shape:IsA("TextLabel") then
+				shape.TextColor3 = iconColor
+			else
+				shape.BackgroundColor3 = iconColor
+			end
+		end
 	end
 end
 
@@ -441,8 +613,8 @@ end
 
 function Window:_updateContentOffset()
 	local width = self.SidebarCollapsed and 64 or self.SidebarWidth
-	tween(self.Sidebar, 0.32, {Size = UDim2.new(0, width, 1, -58)}, Enum.EasingStyle.Quint)
-	tween(self.Content, 0.32, {Position = UDim2.new(0, width, 0, 58), Size = UDim2.new(1, -width, 1, -58)}, Enum.EasingStyle.Quint)
+	tween(self.Sidebar, 0.44, {Size = UDim2.new(0, width, 1, -58)}, Enum.EasingStyle.Quint)
+	tween(self.Content, 0.44, {Position = UDim2.new(0, width, 0, 58), Size = UDim2.new(1, -width, 1, -58)}, Enum.EasingStyle.Quint)
 	for _, tab in ipairs(self.Tabs) do
 		tab.ButtonTitle.Visible = not self.SidebarCollapsed
 	end
@@ -485,15 +657,19 @@ function Window:Show()
 	if self.Root then
 		self.Root.Visible = true
 		self.Root.GroupTransparency = 1
-		tween(self.Root, 0.32, {GroupTransparency = 0}, Enum.EasingStyle.Quint)
+		local basePosition = self._visiblePosition or self.Root.Position
+		self.Root.Position = basePosition + UDim2.fromOffset(0, 10)
+		tween(self.Root, 0.42, {GroupTransparency = 0, Position = basePosition}, Enum.EasingStyle.Quint)
 	end
+	self:_setBackgroundBlur(true)
 end
 
 function Window:Hide()
 	self.Hidden = true
 	if self.Root then
-		tween(self.Root, 0.26, {GroupTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-		task.delay(0.28, function()
+		self._visiblePosition = self.Root.Position
+		tween(self.Root, 0.3, {GroupTransparency = 1, Position = self.Root.Position + UDim2.fromOffset(0, 10)}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		task.delay(0.32, function()
 			if self.Hidden and self.Gui and self.Root then
 				self.Root.Visible = false
 				self.Gui.Enabled = false
@@ -502,6 +678,7 @@ function Window:Hide()
 	else
 		self.Gui.Enabled = false
 	end
+	self:_setBackgroundBlur(false)
 end
 
 function Window:Toggle()
@@ -513,6 +690,14 @@ function Window:Toggle()
 end
 
 function Window:Destroy()
+	self:_setBackgroundBlur(false)
+	if self.BlurEffect then
+		task.delay(0.32, function()
+			if self.BlurEffect then
+				self.BlurEffect:Destroy()
+			end
+		end)
+	end
 	for _, connection in ipairs(self._connections) do
 		if connection and connection.Disconnect then
 			connection:Disconnect()
@@ -522,6 +707,33 @@ function Window:Destroy()
 	if self.Gui then
 		self.Gui:Destroy()
 	end
+end
+
+function Window:_setBackgroundBlur(enabled)
+	if not self.FrostedGlass then
+		return
+	end
+	if enabled then
+		if not self.BlurEffect then
+			self.BlurEffect = new("BlurEffect", {
+				Name = "AnchorlineBackgroundBlur",
+				Size = 0,
+				Parent = Lighting
+			})
+		end
+		tween(self.BlurEffect, 0.45, {Size = self.BlurSize or 10}, Enum.EasingStyle.Quint)
+	elseif self.BlurEffect then
+		tween(self.BlurEffect, 0.28, {Size = 0}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	end
+end
+
+function Window:SetFrostedGlass(enabled)
+	self.FrostedGlass = enabled and true or false
+	if self.Root then
+		self.Root.BackgroundTransparency = self.FrostedGlass and (self.GlassTransparency or 0.12) or 0
+	end
+	self:_setBackgroundBlur(self.FrostedGlass and not self.Hidden)
+	return self
 end
 
 function Window:_makeDraggable()
@@ -728,8 +940,8 @@ function Window:Notify(options)
 
 	local card = new("Frame", {
 		Name = "NotificationCard",
-		Position = UDim2.fromOffset(44, 0),
-		Size = UDim2.new(1, -44, 0, 0),
+		Position = UDim2.fromOffset(54, 0),
+		Size = UDim2.new(1, -54, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
@@ -800,7 +1012,7 @@ function Window:Notify(options)
 
 	task.defer(function()
 		if not card or not card.Parent then return end
-		tween(card, 0.42, {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(card, 0.5, {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = self.FrostedGlass and 0.1 or 0}, Enum.EasingStyle.Quint)
 		tween(cardStroke, 0.36, {Transparency = 0}, Enum.EasingStyle.Quint)
 		tween(badge, 0.34, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
 		tween(title, 0.34, {TextTransparency = 0}, Enum.EasingStyle.Quint)
@@ -811,7 +1023,7 @@ function Window:Notify(options)
 		if not card or not card.Parent then
 			return
 		end
-		tween(card, 0.36, {Position = UDim2.fromOffset(44, 0), Size = UDim2.new(1, -44, 0, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(card, 0.34, {Position = UDim2.fromOffset(54, 0), Size = UDim2.new(1, -54, 0, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(cardStroke, 0.25, {Transparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(badge, 0.22, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(title, 0.22, {TextTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
@@ -909,8 +1121,8 @@ function Window:Prompt(options)
 		end
 		closed = true
 		safeCall(options.Callback, value)
-		tween(overlay, 0.16, {BackgroundTransparency = 1})
-		tween(card, 0.16, {BackgroundTransparency = 1})
+		tween(overlay, 0.22, {BackgroundTransparency = 1})
+		tween(card, 0.22, {BackgroundTransparency = 1})
 		task.delay(0.18, function()
 			if overlay then
 				overlay:Destroy()
@@ -923,8 +1135,8 @@ function Window:Prompt(options)
 	confirm.MouseButton1Click:Connect(function()
 		close(true)
 	end)
-	tween(overlay, 0.16, {BackgroundTransparency = 0.45})
-	tween(card, 0.16, {BackgroundTransparency = 0})
+	tween(overlay, 0.28, {BackgroundTransparency = 0.55})
+	tween(card, 0.32, {BackgroundTransparency = self.FrostedGlass and 0.08 or 0})
 	return overlay
 end
 
@@ -954,7 +1166,7 @@ function Window:CreateTab(name, icon, description)
 	local button = new("TextButton", {
 		Name = tab.Name .. "TabButton",
 		Size = UDim2.new(1, 0, 0, 34),
-		BackgroundTransparency = 0,
+		BackgroundTransparency = self.FrostedGlass and 0.18 or 0,
 		AutoButtonColor = false,
 		Text = "",
 		Parent = self.TabList
@@ -987,18 +1199,16 @@ function Window:CreateTab(name, icon, description)
 			iconImage.ImageRectSize = tab.IconAsset.ImageRectSize
 		end
 	end
-	local iconLabel = new("TextLabel", {
-		Name = "Icon",
+	local iconHolder = new("Frame", {
+		Name = "VectorIcon",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(12, 0),
-		Size = UDim2.fromOffset(22, 34),
-		Font = Enum.Font.GothamBold,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Text = tab.Icon,
+		Position = UDim2.fromOffset(13, 7),
+		Size = UDim2.fromOffset(20, 20),
 		Visible = tab.IconAsset == nil,
 		Parent = button
 	})
+	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
+	local iconLabel = nil
 	local titleLabel = new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
@@ -1036,6 +1246,7 @@ function Window:CreateTab(name, icon, description)
 	tab.ButtonTitle = titleLabel
 	tab.ButtonIcon = iconLabel
 	tab.ButtonIconImage = iconImage
+	tab.ButtonIconShapes = iconShapes
 	tab.ButtonAccent = indicator
 	tab.Page = page
 
@@ -1064,7 +1275,7 @@ function Window:_createElement(tab, titleText, searchText, height)
 		Name = tostring(titleText or "Element"),
 		Size = UDim2.new(1, -32, 0, height or 54),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundTransparency = 0,
+		BackgroundTransparency = self.FrostedGlass and 0.14 or 0,
 		ClipsDescendants = false,
 		Parent = tab.Page
 	}, {
@@ -1283,8 +1494,8 @@ function Tab:CreateToggle(options)
 		local targetColor = value and activeColor or inactiveColor
 		local targetPosition = value and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)
 		if animated then
-			tween(button, 0.26, {BackgroundColor3 = targetColor}, Enum.EasingStyle.Quint)
-			tween(knob, 0.26, {Position = targetPosition}, Enum.EasingStyle.Quint)
+			tween(button, 0.34, {BackgroundColor3 = targetColor}, Enum.EasingStyle.Quint)
+			tween(knob, 0.34, {Position = targetPosition}, Enum.EasingStyle.Quint)
 		else
 			button.BackgroundColor3 = targetColor
 			knob.Position = targetPosition
@@ -1380,12 +1591,17 @@ function Tab:CreateSlider(options)
 		end
 		return math.clamp(number, minValue, maxValue)
 	end
-	local function render()
+	local function render(animated)
 		local percent = 0
 		if maxValue ~= minValue then
 			percent = (value - minValue) / (maxValue - minValue)
 		end
-		fill.Size = UDim2.fromScale(math.clamp(percent, 0, 1), 1)
+		local targetSize = UDim2.fromScale(math.clamp(percent, 0, 1), 1)
+		if animated then
+			tween(fill, 0.18, {Size = targetSize}, Enum.EasingStyle.Quint)
+		else
+			fill.Size = targetSize
+		end
 		valueLabel.Text = tostring(value) .. (suffix ~= "" and " " .. suffix or "")
 	end
 	local function updateFromX(x, loading)
@@ -1394,7 +1610,7 @@ function Tab:CreateSlider(options)
 	end
 	function controller:Set(newValue, loading)
 		value = snap(tonumber(newValue) or minValue)
-		render()
+		render(not loading)
 		if not loading then
 			safeCall(options.Callback, value)
 			self.Window:_autoSave()
@@ -1740,7 +1956,7 @@ function Tab:CreateProgress(options)
 	function controller:Set(newValue)
 		value = math.clamp(tonumber(newValue) or minValue, minValue, maxValue)
 		local percent = maxValue ~= minValue and (value - minValue) / (maxValue - minValue) or 0
-		fill.Size = UDim2.fromScale(math.clamp(percent, 0, 1), 1)
+		tween(fill, 0.24, {Size = UDim2.fromScale(math.clamp(percent, 0, 1), 1)}, Enum.EasingStyle.Quint)
 		label.Text = tostring(value) .. suffix
 	end
 	function controller:Get()
@@ -1850,6 +2066,259 @@ function Tab:CreateColorPicker(options)
 	return controller
 end
 
+function Tab:CreateInfoBox(options)
+	options = options or {}
+	local kind = tostring(options.Type or options.Kind or "Info")
+	local name = tostring(options.Title or options.Name or kind)
+	local body = tostring(options.Content or options.Text or options.Description or "")
+	local frame = self.Window:_createElement(self, name, name .. " " .. body .. " info notice", 74)
+	local accent = self.Window:_notificationColors(kind)
+	local strip = new("Frame", {
+		Name = "AccentStrip",
+		Position = UDim2.fromOffset(0, 12),
+		Size = UDim2.new(0, 4, 1, -24),
+		BackgroundColor3 = accent,
+		BorderSizePixel = 0,
+		Parent = frame
+	}, {corner(2)})
+	local contentWrap = new("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -10, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = frame
+	}, {listLayout(Enum.FillDirection.Vertical, 5)})
+	self:_headerRow(contentWrap, name, "")
+	local label = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Text = body,
+		Parent = contentWrap
+	})
+	self.Window:_track(label, {TextColor3 = "TextMuted"})
+	local controller = {}
+	function controller:Set(value)
+		body = tostring(value or "")
+		label.Text = body
+		frame:SetAttribute("SearchText", name .. " " .. body)
+	end
+	function controller:Get()
+		return body
+	end
+	return controller
+end
+
+function Tab:CreateBadge(options)
+	options = options or {}
+	local name = tostring(options.Name or "Badge")
+	local value = tostring(options.Value or options.Text or "Ready")
+	local frame = self.Window:_createElement(self, name, name .. " " .. value .. " badge status", 54)
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 30), Parent = frame})
+	self:_headerRow(row, name, options.Description)
+	local badge = new("TextLabel", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(104, 28),
+		BackgroundTransparency = self.Window.FrostedGlass and 0.1 or 0,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		Text = value,
+		Parent = row
+	}, {corner(8), padding(8, 8, 0, 0), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	self.Window:_track(badge, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+	local controller = {}
+	function controller:Set(newValue)
+		value = tostring(newValue or "")
+		badge.Text = value
+		frame:SetAttribute("SearchText", name .. " " .. value)
+	end
+	function controller:Get()
+		return value
+	end
+	return controller
+end
+
+function Tab:CreateSegmentedControl(options)
+	options = options or {}
+	local name = tostring(options.Name or "Segmented Control")
+	local choices = options.Options or {"One", "Two"}
+	local selected = tostring(options.CurrentOption or options.CurrentValue or choices[1] or "")
+	local frame = self.Window:_createElement(self, name, name .. " segmented control " .. table.concat(choices, " "), 84)
+	self:_headerRow(frame, name, options.Description)
+	local row = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 32),
+		BackgroundTransparency = self.Window.FrostedGlass and 0.35 or 0,
+		Parent = frame
+	}, {corner(8), padding(3, 3, 3, 3), listLayout(Enum.FillDirection.Horizontal, 4)})
+	self.Window:_track(row, {BackgroundColor3 = "Surface"})
+	local controller = {Type = "SegmentedControl", Flag = options.Flag}
+	local buttons = {}
+	local function render(animated)
+		for optionName, button in pairs(buttons) do
+			local active = optionName == selected
+			local props = {
+				BackgroundColor3 = getThemeValue(self.Window, active and "Accent" or "Surface"),
+				TextColor3 = getThemeValue(self.Window, active and "AccentText" or "TextMuted")
+			}
+			if animated then tween(button, 0.22, props, Enum.EasingStyle.Quint) else for k,v in pairs(props) do button[k] = v end end
+		end
+	end
+	for _, option in ipairs(choices) do
+		local optionName = tostring(option)
+		local button = new("TextButton", {
+			Size = UDim2.new(1 / math.max(#choices, 1), -3, 1, 0),
+			Text = optionName,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 12,
+			AutoButtonColor = false,
+			Parent = row
+		}, {corner(6)})
+		buttons[optionName] = button
+		button.MouseButton1Click:Connect(function()
+			controller:Set(optionName)
+		end)
+	end
+	function controller:Set(newValue, loading)
+		selected = tostring(newValue or selected)
+		render(not loading)
+		if not loading then
+			safeCall(options.Callback, selected)
+			self.Window:_autoSave()
+		end
+	end
+	function controller:Get()
+		return selected
+	end
+	render(false)
+	self.Window:_registerFlag(options.Flag, controller)
+	return controller
+end
+
+function Tab:CreateStepper(options)
+	options = options or {}
+	local name = tostring(options.Name or "Stepper")
+	local range = options.Range or {0, 10}
+	local minValue = tonumber(range[1]) or 0
+	local maxValue = tonumber(range[2]) or 10
+	local step = tonumber(options.Step or options.Increment) or 1
+	local value = math.clamp(tonumber(options.CurrentValue) or minValue, minValue, maxValue)
+	local frame = self.Window:_createElement(self, name, name .. " stepper number", 64)
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 40), Parent = frame})
+	self:_headerRow(row, name, options.Description)
+	local controls = new("Frame", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(142, 32),
+		BackgroundTransparency = 1,
+		Parent = row
+	}, {listLayout(Enum.FillDirection.Horizontal, 6)})
+	local function makeButton(text)
+		local b = new("TextButton", {
+			Size = UDim2.fromOffset(32, 30),
+			Text = text,
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			AutoButtonColor = false,
+			Parent = controls
+		}, {corner(7), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		self.Window:_track(b, {BackgroundColor3 = "Surface", TextColor3 = "TextMuted"})
+		return b
+	end
+	local minus = makeButton("−")
+	local valueText = new("TextLabel", {
+		Size = UDim2.fromOffset(58, 30),
+		BackgroundTransparency = self.Window.FrostedGlass and 0.2 or 0,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 13,
+		Parent = controls
+	}, {corner(7), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	self.Window:_track(valueText, {BackgroundColor3 = "Input", TextColor3 = "Text"})
+	local plus = makeButton("+")
+	local controller = {Type = "Stepper", Flag = options.Flag}
+	local function render()
+		valueText.Text = tostring(value)
+	end
+	function controller:Set(newValue, loading)
+		value = math.clamp(tonumber(newValue) or value, minValue, maxValue)
+		render()
+		if not loading then
+			safeCall(options.Callback, value)
+			self.Window:_autoSave()
+		end
+	end
+	function controller:Get()
+		return value
+	end
+	minus.MouseButton1Click:Connect(function() controller:Set(value - step) end)
+	plus.MouseButton1Click:Connect(function() controller:Set(value + step) end)
+	render()
+	self.Window:_registerFlag(options.Flag, controller)
+	return controller
+end
+
+function Tab:CreateTextArea(options)
+	options = options or {}
+	local name = tostring(options.Name or "Text Area")
+	local value = tostring(options.CurrentValue or "")
+	local height = tonumber(options.Height) or 126
+	local frame = self.Window:_createElement(self, name, name .. " multiline textarea notes", height)
+	self:_headerRow(frame, name, options.Description)
+	local box = new("TextBox", {
+		Size = UDim2.new(1, 0, 0, math.max(54, height - 58)),
+		BackgroundTransparency = self.Window.FrostedGlass and 0.18 or 0,
+		Text = value,
+		PlaceholderText = tostring(options.PlaceholderText or options.Placeholder or "Type here"),
+		ClearTextOnFocus = false,
+		MultiLine = true,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = frame
+	}, {corner(8), padding(10, 10, 8, 8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	self.Window:_track(box, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
+	local controller = {Type = "TextArea", Flag = options.Flag}
+	function controller:Set(newValue, loading)
+		value = tostring(newValue or "")
+		box.Text = value
+		if not loading then
+			safeCall(options.Callback, value)
+			self.Window:_autoSave()
+		end
+	end
+	function controller:Get()
+		return value
+	end
+	box.FocusLost:Connect(function(enterPressed)
+		controller:Set(box.Text)
+		safeCall(options.FocusLostCallback, box.Text, enterPressed)
+	end)
+	self.Window:_registerFlag(options.Flag, controller)
+	return controller
+end
+
+function Tab:CreateSpacer(height)
+	local frame = new("Frame", {
+		Name = "Spacer",
+		Size = UDim2.new(1, -32, 0, tonumber(height) or 8),
+		BackgroundTransparency = 1,
+		Parent = self.Page
+	})
+	self.Elements[#self.Elements + 1] = frame
+	return frame
+end
+
+function Tab:CreateSeparator()
+	return self:CreateDivider()
+end
+
 function Anchorline:CreateWindow(options)
 	options = options or {}
 	local self = setmetatable({}, Window)
@@ -1871,6 +2340,9 @@ function Anchorline:CreateWindow(options)
 	end
 	self.ThemeName = "Workbench"
 	self.Theme = Anchorline.Themes.Workbench
+	self.FrostedGlass = options.FrostedGlass ~= false
+	self.GlassTransparency = tonumber(options.GlassTransparency) or 0.12
+	self.BlurSize = tonumber(options.BlurSize) or 10
 	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide)
 
 	local parent = options.Parent or resolveParent()
@@ -1889,7 +2361,7 @@ function Anchorline:CreateWindow(options)
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = options.Position or UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(self.Width, self.Height),
-		BackgroundTransparency = 0,
+		BackgroundTransparency = self.FrostedGlass and self.GlassTransparency or 0,
 		GroupTransparency = 0,
 		ClipsDescendants = true,
 		Parent = gui
@@ -1899,6 +2371,15 @@ function Anchorline:CreateWindow(options)
 	local rootStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
 	rootStroke.Parent = root
 	self:_track(rootStroke, {Color = "Stroke"})
+	local rootGradient = new("UIGradient", {
+		Rotation = 90,
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.52, 0.05),
+			NumberSequenceKeypoint.new(1, 0.1)
+		})
+	})
+	rootGradient.Parent = root
 
 	local header = new("Frame", {
 		Name = "Header",
@@ -2050,6 +2531,7 @@ function Anchorline:CreateWindow(options)
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -16, 0.5, 0),
 		Size = UDim2.fromOffset(210, 34),
+		BackgroundTransparency = self.FrostedGlass and 0.18 or 0,
 		Parent = contentHeader
 	}, {corner(10), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 	self:_track(searchWrap, {BackgroundColor3 = "Input"})
@@ -2142,6 +2624,7 @@ function Anchorline:CreateWindow(options)
 	end)
 
 	self:SetTheme(options.Theme or "Workbench")
+	self:_setBackgroundBlur(self.FrostedGlass)
 	Anchorline.Windows[#Anchorline.Windows + 1] = self
 	Anchorline.LastWindow = self
 
@@ -2177,6 +2660,20 @@ function Anchorline:SetFlag(flag, value)
 		return true
 	end
 	return false
+end
+
+function Anchorline:SetIconProvider(provider)
+	if type(provider) == "table" then
+		Anchorline.IconProvider = provider
+	end
+	return Anchorline
+end
+
+function Anchorline:SetTheme(name, theme)
+	if type(name) == "string" and type(theme) == "table" then
+		Anchorline.Themes[name] = theme
+	end
+	return Anchorline
 end
 
 return Anchorline
