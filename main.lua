@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.5.0"
+Anchorline.Version = "2.6.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 Anchorline.Motion = {
@@ -624,6 +624,9 @@ function Window:_selectTab(tab)
 		self:_styleTabButton(candidate)
 	end
 	self:_applySearch()
+	if tab.Page then
+		self:_updatePageCanvas(tab.Page)
+	end
 	self:_queueSmartResize()
 end
 
@@ -667,39 +670,85 @@ function Window:_addAdaptiveHandler(handler)
 	end)
 end
 
-function Window:_measureActiveContent()
-	local active = self.ActiveTab
-	local minimumContentWidth = self.SmartContentMinWidth or 390
-	local contentHeight = 160
-	if active and active.Page then
-		local layout = active.Page:FindFirstChildOfClass("UIListLayout")
-		if layout then
-			contentHeight = 66 + layout.AbsoluteContentSize.Y + 34
-		end
-		for _, element in ipairs(active.Elements or {}) do
-			if element and element.Parent then
-				local elementWidth = tonumber(element:GetAttribute("AnchorlineMinWidth")) or 0
-				if elementWidth > minimumContentWidth then
-					minimumContentWidth = elementWidth
-				end
+function Window:_getPagePadding(page)
+	local pad = page and page:FindFirstChildOfClass("UIPadding")
+	if not pad then
+		return 0, 0, 0, 0
+	end
+	return pad.PaddingLeft.Offset, pad.PaddingRight.Offset, pad.PaddingTop.Offset, pad.PaddingBottom.Offset
+end
+
+function Window:_updatePageCanvas(page)
+	if not page or not page:IsA("ScrollingFrame") then
+		return 0
+	end
+	local _, _, padTop, padBottom = self:_getPagePadding(page)
+	local layout = page:FindFirstChildOfClass("UIListLayout")
+	local contentHeight = 0
+	if layout then
+		contentHeight = layout.AbsoluteContentSize.Y
+	else
+		for _, child in ipairs(page:GetChildren()) do
+			if child:IsA("GuiObject") and child.Visible then
+				contentHeight = math.max(contentHeight, child.Position.Y.Offset + child.AbsoluteSize.Y)
 			end
 		end
 	end
-	return minimumContentWidth, contentHeight
+	local canvasHeight = math.max(0, math.ceil(contentHeight + padTop + padBottom + 10))
+	page.AutomaticCanvasSize = Enum.AutomaticSize.None
+	page.CanvasSize = UDim2.fromOffset(0, canvasHeight)
+	page.ScrollingDirection = Enum.ScrollingDirection.Y
+	page.ScrollingEnabled = true
+	return canvasHeight
+end
+
+function Window:_refreshPageCanvases()
+	for _, tab in ipairs(self.Tabs or {}) do
+		if tab.Page then
+			self:_updatePageCanvas(tab.Page)
+		end
+	end
+end
+
+function Window:_measureActiveContent()
+	local active = self.ActiveTab
+	local minimumContentWidth = tonumber(self.SmartContentMinWidth) or 390
+	local pageContentHeight = 0
+	if active and active.Page then
+		pageContentHeight = self:_updatePageCanvas(active.Page)
+		local pageWidth = math.max(0, active.Page.AbsoluteSize.X)
+		for _, element in ipairs(active.Elements or {}) do
+			if element and element.Parent and element.Visible then
+				local elementWidth = tonumber(element:GetAttribute("AnchorlineMinWidth")) or 0
+				if elementWidth <= 0 and element.AbsoluteSize.X > 0 then
+					elementWidth = math.min(element.AbsoluteSize.X, pageWidth)
+				end
+				minimumContentWidth = math.max(minimumContentWidth, elementWidth)
+			end
+		end
+	end
+	return minimumContentWidth, pageContentHeight
 end
 
 function Window:_calculateSmartSize()
 	local viewport = getViewportSize()
 	local margin = tonumber(self.SmartViewportMargin) or 44
-	local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, math.max(520, viewport.X - margin))
-	local maxHeight = math.min(tonumber(self.MaxHeight) or 760, math.max(360, viewport.Y - margin))
-	local minWidth = tonumber(self.MinWidth) or 560
-	local minHeight = tonumber(self.MinHeight) or 390
-	local contentMinWidth, contentHeight = self:_measureActiveContent()
+	local baseMinWidth = tonumber(self.MinWidth) or 560
+	local baseMinHeight = tonumber(self.MinHeight) or 390
+	local safeViewportWidth = math.max(baseMinWidth, viewport.X - margin)
+	local safeViewportHeight = math.max(baseMinHeight, viewport.Y - margin)
+	local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, safeViewportWidth)
+	local maxHeight = math.min(tonumber(self.MaxHeight) or 760, safeViewportHeight)
+	local contentMinWidth, pageContentHeight = self:_measureActiveContent()
 	local sidebarWidth = self.SidebarCollapsed and 64 or self.SidebarWidth
-	local desiredWidth = math.max(tonumber(self.Width) or minWidth, sidebarWidth + contentMinWidth + 54)
-	local desiredHeight = math.max(tonumber(self.Height) or minHeight, 58 + math.min(contentHeight, maxHeight - 58))
-	return clampVectorSize(desiredWidth, desiredHeight, minWidth, minHeight, maxWidth, maxHeight)
+	local smartMinWidth = math.min(maxWidth, math.max(baseMinWidth, sidebarWidth + contentMinWidth + 42))
+	local smartMinHeight = math.min(maxHeight, math.max(baseMinHeight, 360))
+	local desiredWidth = math.max(tonumber(self.Width) or baseMinWidth, smartMinWidth)
+	local chromeHeight = 58 + 66 + 30
+	local desiredContentHeight = math.min(pageContentHeight, math.max(180, maxHeight - chromeHeight))
+	local desiredHeight = math.max(tonumber(self.Height) or baseMinHeight, chromeHeight + desiredContentHeight)
+	local targetWidth, targetHeight = clampVectorSize(desiredWidth, desiredHeight, smartMinWidth, smartMinHeight, maxWidth, maxHeight)
+	return targetWidth, targetHeight, smartMinWidth, smartMinHeight, maxWidth, maxHeight
 end
 
 function Window:SmartResize(animated)
@@ -707,20 +756,33 @@ function Window:SmartResize(animated)
 		return self
 	end
 	self:_refreshAdaptiveLayouts()
-	local targetWidth, targetHeight = self:_calculateSmartSize()
-	self._computedMinWidth = targetWidth
-	self._computedMinHeight = math.min(targetHeight, tonumber(self.MaxHeight) or targetHeight)
+	self:_refreshPageCanvases()
+	local targetWidth, targetHeight, smartMinWidth, smartMinHeight = self:_calculateSmartSize()
+	self._computedMinWidth = smartMinWidth
+	self._computedMinHeight = smartMinHeight
 	local targetSize = UDim2.fromOffset(targetWidth, targetHeight)
 	local currentSize = self.Root.AbsoluteSize
 	if math.abs(currentSize.X - targetWidth) < 1 and math.abs(currentSize.Y - targetHeight) < 1 then
 		return self
 	end
 	if animated then
-		tween(self.Root, Anchorline.Motion.Panel, {Size = targetSize}, Enum.EasingStyle.Quint)
+		tween(self.Root, 0.5, {Size = targetSize}, Enum.EasingStyle.Quint)
 	else
 		self.Root.Size = targetSize
 	end
+	task.defer(function()
+		if self.Root and self.Root.Parent then
+			self:_refreshAdaptiveLayouts()
+			self:_refreshPageCanvases()
+		end
+	end)
 	return self
+end
+
+function Window:RefreshLayout(animated)
+	self:_refreshAdaptiveLayouts()
+	self:_refreshPageCanvases()
+	return self:SmartResize(animated ~= false)
 end
 
 function Window:_queueSmartResize()
@@ -728,7 +790,7 @@ function Window:_queueSmartResize()
 		return
 	end
 	self._smartResizeQueued = true
-	task.delay(0.05, function()
+	task.delay(0.035, function()
 		self._smartResizeQueued = false
 		if self.Root and self.Root.Parent then
 			self:SmartResize(true)
@@ -1350,10 +1412,12 @@ function Window:CreateTab(name, icon, description)
 		Name = tab.Name .. "Page",
 		Size = UDim2.fromScale(1, 1),
 		CanvasSize = UDim2.fromOffset(0, 0),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		ScrollBarThickness = 4,
-		ScrollBarImageTransparency = 0.25,
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		ScrollBarThickness = 5,
+		ScrollBarImageTransparency = 0.18,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = true,
+		Active = true,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
@@ -1364,6 +1428,13 @@ function Window:CreateTab(name, icon, description)
 		listLayout(Enum.FillDirection.Vertical, 10)
 	})
 	self:_track(page, {ScrollBarImageColor3 = "Accent"})
+	local pageLayout = page:FindFirstChildOfClass("UIListLayout")
+	if pageLayout then
+		self._connections[#self._connections + 1] = pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			self:_updatePageCanvas(page)
+			self:_queueSmartResize()
+		end)
+	end
 
 	tab.Button = button
 	tab.ButtonStroke = buttonStroke
@@ -2279,26 +2350,34 @@ end
 
 function Tab:CreateInfoBox(options)
 	options = options or {}
+	local window = self.Window
 	local kind = tostring(options.Type or options.Kind or "Info")
 	local name = tostring(options.Title or options.Name or kind)
 	local body = tostring(options.Content or options.Text or options.Description or "")
-	local frame = self.Window:_createElement(self, name, name .. " " .. body .. " info notice", 74)
-	local accent = self.Window:_notificationColors(kind)
+	local frame = window:_createElement(self, name, name .. " " .. body .. " info notice", 84)
+	frame.AutomaticSize = Enum.AutomaticSize.None
+	frame.ClipsDescendants = true
+	local inheritedLayout = frame:FindFirstChildOfClass("UIListLayout")
+	if inheritedLayout then
+		inheritedLayout:Destroy()
+	end
+	local accent = window:_notificationColors(kind)
 	local strip = new("Frame", {
 		Name = "AccentStrip",
-		Position = UDim2.fromOffset(0, 12),
-		Size = UDim2.new(0, 4, 1, -24),
+		Position = UDim2.fromOffset(0, 14),
+		Size = UDim2.new(0, 4, 1, -28),
 		BackgroundColor3 = accent,
 		BorderSizePixel = 0,
 		Parent = frame
 	}, {corner(2)})
 	local contentWrap = new("Frame", {
+		Name = "Content",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(10, 0),
-		Size = UDim2.new(1, -10, 0, 0),
+		Position = UDim2.fromOffset(16, 0),
+		Size = UDim2.new(1, -16, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = frame
-	}, {listLayout(Enum.FillDirection.Vertical, 5)})
+	}, {listLayout(Enum.FillDirection.Vertical, 6)})
 	self:_headerRow(contentWrap, name, "")
 	local label = new("TextLabel", {
 		BackgroundTransparency = 1,
@@ -2312,12 +2391,29 @@ function Tab:CreateInfoBox(options)
 		Text = body,
 		Parent = contentWrap
 	})
-	self.Window:_track(label, {TextColor3 = "TextMuted"})
+	window:_track(label, {TextColor3 = "TextMuted"})
+	local contentLayout = contentWrap:FindFirstChildOfClass("UIListLayout")
+	local function resizeBox()
+		if not frame or not frame.Parent then
+			return
+		end
+		local contentHeight = contentLayout and contentLayout.AbsoluteContentSize.Y or 48
+		local height = math.max(76, math.ceil(contentHeight + 26))
+		frame.Size = UDim2.new(1, 0, 0, height)
+		strip.Size = UDim2.new(0, 4, 1, -28)
+		window:_queueSmartResize()
+	end
+	if contentLayout then
+		window._connections[#window._connections + 1] = contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeBox)
+	end
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeBox)
+	task.defer(resizeBox)
 	local controller = {}
 	function controller:Set(value)
 		body = tostring(value or "")
 		label.Text = body
 		frame:SetAttribute("SearchText", name .. " " .. body)
+		resizeBox()
 	end
 	function controller:Get()
 		return body
