@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.0.0"
+Anchorline.Version = "2.3.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 
@@ -11,6 +11,7 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -26,10 +27,19 @@ local function safeCall(callback, ...)
 end
 
 local function new(className, properties, children)
-	local object = Instance.new(className)
+	local ok, object = pcall(Instance.new, className)
+	if not ok then
+		if className == "CanvasGroup" then
+			object = Instance.new("Frame")
+		else
+			error(object, 2)
+		end
+	end
 	if properties then
 		for property, value in pairs(properties) do
-			object[property] = value
+			pcall(function()
+				object[property] = value
+			end)
 		end
 	end
 	if children then
@@ -41,7 +51,7 @@ local function new(className, properties, children)
 end
 
 local function tween(object, time, properties, easingStyle, easingDirection)
-	local info = TweenInfo.new(time or 0.18, easingStyle or Enum.EasingStyle.Quart, easingDirection or Enum.EasingDirection.Out)
+	local info = TweenInfo.new(time or 0.24, easingStyle or Enum.EasingStyle.Quint, easingDirection or Enum.EasingDirection.Out)
 	local t = TweenService:Create(object, info, properties)
 	t:Play()
 	return t
@@ -115,6 +125,62 @@ local function tableToColor(value, fallback)
 	return fallback or Color3.fromRGB(255, 255, 255)
 end
 
+local function isRobloxImagePath(value)
+	return type(value) == "string" and (
+		value:find("^rbxassetid://") ~= nil or
+		value:find("^rbxasset://") ~= nil or
+		value:find("^rbxthumb://") ~= nil
+	)
+end
+
+local function resolveIconAssetFromTable(value)
+	if type(value) ~= "table" then
+		return nil
+	end
+	local image = value.Image or value.Url or value.Asset or value.AssetId or value.Id
+	if typeof(image) == "number" then
+		image = "rbxassetid://" .. tostring(image)
+	end
+	if type(image) ~= "string" or image == "" then
+		return nil
+	end
+	local data = {Image = image}
+	if typeof(value.ImageRectOffset) == "Vector2" then
+		data.ImageRectOffset = value.ImageRectOffset
+	elseif type(value.ImageRectOffset) == "table" then
+		data.ImageRectOffset = Vector2.new(value.ImageRectOffset[1] or 0, value.ImageRectOffset[2] or 0)
+	end
+	if typeof(value.ImageRectSize) == "Vector2" then
+		data.ImageRectSize = value.ImageRectSize
+	elseif type(value.ImageRectSize) == "table" then
+		data.ImageRectSize = Vector2.new(value.ImageRectSize[1] or 0, value.ImageRectSize[2] or 0)
+	end
+	return data
+end
+
+local function findLucideProvider(explicitProvider)
+	if type(explicitProvider) == "table" and type(explicitProvider.GetAsset) == "function" then
+		return explicitProvider
+	end
+	if type(Anchorline.IconProvider) == "table" and type(Anchorline.IconProvider.GetAsset) == "function" then
+		return Anchorline.IconProvider
+	end
+	local candidates = {
+		ReplicatedStorage:FindFirstChild("Lucide"),
+		ReplicatedStorage:FindFirstChild("LucideIcons"),
+		ReplicatedStorage:FindFirstChild("lucide-roblox")
+	}
+	for _, module in ipairs(candidates) do
+		if module and module:IsA("ModuleScript") then
+			local ok, provider = pcall(require, module)
+			if ok and type(provider) == "table" and type(provider.GetAsset) == "function" then
+				return provider
+			end
+		end
+	end
+	return nil
+end
+
 local function fileAvailable()
 	return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" and type(makefolder) == "function" and type(isfolder) == "function"
 end
@@ -140,26 +206,26 @@ end
 
 Anchorline.Themes = {
 	Workbench = {
-		Background = Color3.fromRGB(241, 243, 240),
-		Panel = Color3.fromRGB(250, 250, 247),
-		PanelAlt = Color3.fromRGB(246, 247, 244),
-		Surface = Color3.fromRGB(255, 255, 252),
-		SurfaceHover = Color3.fromRGB(236, 241, 237),
-		Input = Color3.fromRGB(255, 255, 253),
-		Stroke = Color3.fromRGB(199, 207, 201),
-		StrokeSoft = Color3.fromRGB(218, 224, 219),
-		Text = Color3.fromRGB(35, 42, 39),
-		TextMuted = Color3.fromRGB(94, 105, 101),
-		TextFaint = Color3.fromRGB(134, 144, 140),
-		Accent = Color3.fromRGB(82, 121, 107),
-		AccentHover = Color3.fromRGB(70, 108, 95),
-		AccentSoft = Color3.fromRGB(223, 235, 230),
-		AccentText = Color3.fromRGB(255, 255, 252),
-		ControlKnob = Color3.fromRGB(255, 255, 252),
-		Success = Color3.fromRGB(76, 142, 99),
-		Warning = Color3.fromRGB(166, 121, 54),
-		Danger = Color3.fromRGB(174, 66, 60),
-		Overlay = Color3.fromRGB(53, 61, 58)
+		Background = Color3.fromRGB(238, 235, 229),
+		Panel = Color3.fromRGB(252, 250, 246),
+		PanelAlt = Color3.fromRGB(247, 245, 240),
+		Surface = Color3.fromRGB(255, 253, 249),
+		SurfaceHover = Color3.fromRGB(243, 240, 233),
+		Input = Color3.fromRGB(255, 253, 249),
+		Stroke = Color3.fromRGB(202, 195, 184),
+		StrokeSoft = Color3.fromRGB(225, 219, 208),
+		Text = Color3.fromRGB(37, 42, 39),
+		TextMuted = Color3.fromRGB(87, 94, 88),
+		TextFaint = Color3.fromRGB(132, 139, 131),
+		Accent = Color3.fromRGB(92, 122, 108),
+		AccentHover = Color3.fromRGB(77, 103, 91),
+		AccentSoft = Color3.fromRGB(226, 235, 229),
+		AccentText = Color3.fromRGB(255, 253, 249),
+		ControlKnob = Color3.fromRGB(255, 253, 249),
+		Success = Color3.fromRGB(83, 135, 96),
+		Warning = Color3.fromRGB(165, 122, 63),
+		Danger = Color3.fromRGB(168, 76, 70),
+		Overlay = Color3.fromRGB(73, 68, 62)
 	},
 	Ledger = {
 		Background = Color3.fromRGB(244, 242, 237),
@@ -302,28 +368,60 @@ function Window:SetTheme(theme)
 	return self
 end
 
+function Window:_resolveIcon(icon)
+	if icon == nil or icon == "" then
+		return nil
+	end
+	if typeof(icon) == "number" then
+		return {Image = "rbxassetid://" .. tostring(icon)}
+	end
+	local tableIcon = resolveIconAssetFromTable(icon)
+	if tableIcon then
+		return tableIcon
+	end
+	if type(icon) == "string" then
+		if isRobloxImagePath(icon) then
+			return {Image = icon}
+		end
+		local provider = self.IconProvider
+		if provider and type(provider.GetAsset) == "function" then
+			local ok, asset = pcall(provider.GetAsset, icon, 48)
+			if ok then
+				return resolveIconAssetFromTable(asset)
+			end
+		end
+	end
+	return nil
+end
+
 function Window:_styleTabButton(tab)
 	if not tab or not tab.Button then
 		return
 	end
 	local active = self.ActiveTab == tab
+	local iconColor = active and getThemeValue(self, "Accent") or getThemeValue(self, "TextFaint")
 	if active then
-		tab.Button.BackgroundColor3 = getThemeValue(self, "Surface")
+		tween(tab.Button, 0.18, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint)
 		tab.ButtonStroke.Color = getThemeValue(self, "Stroke")
 		tab.ButtonTitle.TextColor3 = getThemeValue(self, "Text")
-		tab.ButtonIcon.TextColor3 = getThemeValue(self, "Accent")
 		if tab.ButtonAccent then
 			tab.ButtonAccent.BackgroundColor3 = getThemeValue(self, "Accent")
-			tab.ButtonAccent.BackgroundTransparency = 0
+			tween(tab.ButtonAccent, 0.2, {BackgroundTransparency = 0, Size = UDim2.new(0, 4, 1, -12)}, Enum.EasingStyle.Quint)
 		end
 	else
-		tab.Button.BackgroundColor3 = getThemeValue(self, "Panel")
+		tween(tab.Button, 0.18, {BackgroundColor3 = getThemeValue(self, "Panel")}, Enum.EasingStyle.Quint)
 		tab.ButtonStroke.Color = getThemeValue(self, "StrokeSoft")
 		tab.ButtonTitle.TextColor3 = getThemeValue(self, "TextMuted")
-		tab.ButtonIcon.TextColor3 = getThemeValue(self, "TextFaint")
 		if tab.ButtonAccent then
-			tab.ButtonAccent.BackgroundTransparency = 1
+			tween(tab.ButtonAccent, 0.16, {BackgroundTransparency = 1, Size = UDim2.new(0, 3, 1, -16)}, Enum.EasingStyle.Quint)
 		end
+	end
+	if tab.ButtonIcon then
+		tab.ButtonIcon.TextColor3 = iconColor
+	end
+	if tab.ButtonIconImage then
+		tab.ButtonIconImage.ImageColor3 = iconColor
+		tab.ButtonIconImage.ImageTransparency = active and 0 or 0.18
 	end
 end
 
@@ -343,8 +441,8 @@ end
 
 function Window:_updateContentOffset()
 	local width = self.SidebarCollapsed and 64 or self.SidebarWidth
-	tween(self.Sidebar, 0.2, {Size = UDim2.new(0, width, 1, -52)})
-	tween(self.Content, 0.2, {Position = UDim2.new(0, width, 0, 52), Size = UDim2.new(1, -width, 1, -52)})
+	tween(self.Sidebar, 0.2, {Size = UDim2.new(0, width, 1, -58)})
+	tween(self.Content, 0.2, {Position = UDim2.new(0, width, 0, 58), Size = UDim2.new(1, -width, 1, -58)})
 	for _, tab in ipairs(self.Tabs) do
 		tab.ButtonTitle.Visible = not self.SidebarCollapsed
 	end
@@ -371,7 +469,7 @@ function Window:Minimize(value)
 		self.Sidebar.Visible = false
 		self.Content.Visible = false
 		self.ResizeHandle.Visible = false
-		tween(self.Root, 0.22, {Size = UDim2.new(0, math.max(380, self.Root.AbsoluteSize.X), 0, 52)})
+		tween(self.Root, 0.22, {Size = UDim2.new(0, math.max(420, self.Root.AbsoluteSize.X), 0, 58)})
 	else
 		self.Sidebar.Visible = true
 		self.Content.Visible = true
@@ -601,68 +699,68 @@ function Window:Notify(options)
 	options = options or {}
 	local kind = tostring(options.Type or options.Kind or "Info")
 	local accent = self:_notificationColors(kind)
+	local duration = tonumber(options.Duration) or 4
 
-	local item = new("Frame", {
-		Name = "Notification",
+	local wrapper = new("Frame", {
+		Name = "NotificationSlot",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		ClipsDescendants = false,
+		Parent = self.NotificationList,
+		ZIndex = 60
+	})
+
+	local card = new("Frame", {
+		Name = "NotificationCard",
+		Position = UDim2.fromOffset(36, 0),
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
-		Parent = self.NotificationList,
-		ZIndex = 60
+		Parent = wrapper,
+		ZIndex = 61
 	}, {
-		corner(8),
-		padding(14, 14, 12, 12),
-		listLayout(Enum.FillDirection.Vertical, 6)
+		corner(14),
+		padding(14, 14, 13, 13),
+		listLayout(Enum.FillDirection.Vertical, 7)
 	})
-	self:_track(item, {BackgroundColor3 = "Panel"})
-
-	local itemStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
-	itemStroke.Parent = item
-	itemStroke.ZIndex = 61
-	self:_track(itemStroke, {Color = "Stroke"})
-
-	local topLine = new("Frame", {
-		Name = "StatusLine",
-		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 0, 0, 0),
-		Size = UDim2.new(1, 0, 0, 3),
-		BorderSizePixel = 0,
-		BackgroundColor3 = accent,
-		BackgroundTransparency = 1,
-		Parent = item,
-		ZIndex = 62
-	})
+	self:_track(card, {BackgroundColor3 = "Panel"})
+	local cardStroke = stroke(getThemeValue(self, "Stroke"), 1, 1)
+	cardStroke.Parent = card
+	cardStroke.ZIndex = 62
+	self:_track(cardStroke, {Color = "Stroke"})
 
 	local header = new("Frame", {
-		Name = "Header",
+		Name = "NotificationHeader",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 20),
-		Parent = item,
+		Size = UDim2.new(1, 0, 0, 22),
+		Parent = card,
 		ZIndex = 63
 	})
 
-	local dot = new("Frame", {
-		Name = "StatusDot",
-		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.fromOffset(8, 8),
-		BorderSizePixel = 0,
+	local badge = new("Frame", {
+		Name = "StatusBadge",
+		Position = UDim2.fromOffset(0, 3),
+		Size = UDim2.fromOffset(16, 16),
 		BackgroundColor3 = accent,
 		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
 		Parent = header,
 		ZIndex = 64
-	}, {corner(4)})
+	}, {corner(8)})
 
 	local title = new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(16, 0),
-		Size = UDim2.new(1, -16, 0, 20),
+		Position = UDim2.fromOffset(24, 0),
+		Size = UDim2.new(1, -24, 0, 22),
 		Font = Enum.Font.GothamMedium,
 		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		Text = tostring(options.Title or "Notification"),
 		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = tostring(options.Title or "Notification"),
+		TextTransparency = 1,
 		Parent = header,
 		ZIndex = 64
 	})
@@ -679,44 +777,36 @@ function Window:Notify(options)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = tostring(options.Content or ""),
-		Parent = item,
+		TextTransparency = 1,
+		Parent = card,
 		ZIndex = 64
 	})
 	self:_track(content, {TextColor3 = "TextMuted"})
 
-	itemStroke.Transparency = 1
-	title.TextTransparency = 1
-	content.TextTransparency = 1
-	dot.BackgroundTransparency = 1
-	topLine.BackgroundTransparency = 1
-
 	task.defer(function()
-		if not item or not item.Parent then return end
-		tween(item, 0.18, {BackgroundTransparency = 0})
-		tween(itemStroke, 0.18, {Transparency = 0})
-		tween(title, 0.18, {TextTransparency = 0})
-		tween(content, 0.18, {TextTransparency = 0})
-		tween(dot, 0.18, {BackgroundTransparency = 0})
-		tween(topLine, 0.18, {BackgroundTransparency = 0})
+		if not card or not card.Parent then return end
+		tween(card, 0.34, {Position = UDim2.fromOffset(0, 0), BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(cardStroke, 0.34, {Transparency = 0}, Enum.EasingStyle.Quint)
+		tween(badge, 0.3, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(title, 0.28, {TextTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(content, 0.32, {TextTransparency = 0}, Enum.EasingStyle.Quint)
 	end)
 
-	local duration = tonumber(options.Duration) or 4
 	task.delay(duration, function()
-		if not item or not item.Parent then
+		if not card or not card.Parent then
 			return
 		end
-		tween(item, 0.16, {BackgroundTransparency = 1})
-		tween(itemStroke, 0.16, {Transparency = 1})
-		tween(title, 0.16, {TextTransparency = 1})
-		tween(content, 0.16, {TextTransparency = 1})
-		tween(dot, 0.16, {BackgroundTransparency = 1})
-		tween(topLine, 0.16, {BackgroundTransparency = 1})
-		task.wait(0.18)
-		if item then
-			item:Destroy()
+		tween(card, 0.3, {Position = UDim2.fromOffset(40, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(cardStroke, 0.25, {Transparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(badge, 0.22, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(title, 0.22, {TextTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(content, 0.22, {TextTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		task.wait(0.32)
+		if wrapper then
+			wrapper:Destroy()
 		end
 	end)
-	return item
+	return wrapper
 end
 
 function Window:Prompt(options)
@@ -739,9 +829,9 @@ function Window:Prompt(options)
 		ZIndex = 81,
 		Parent = overlay
 	}, {
-		corner(6),
+		corner(16),
 		stroke(getThemeValue(self, "Stroke"), 1, 0),
-		padding(18, 18, 18, 18),
+		padding(20, 20, 20, 20),
 		listLayout(Enum.FillDirection.Vertical, 10)
 	})
 	self:_track(card, {BackgroundColor3 = "Panel"})
@@ -841,6 +931,7 @@ function Window:CreateTab(name, icon, description)
 	local tab = setmetatable({}, Tab)
 	tab.Window = self
 	tab.Name = tostring(name or "Tab")
+	tab.IconAsset = self:_resolveIcon(icon)
 	tab.Icon = tostring(icon or string.sub(tab.Name, 1, 1)):sub(1, 2)
 	tab.Description = description
 	tab.Elements = {}
@@ -852,7 +943,7 @@ function Window:CreateTab(name, icon, description)
 		AutoButtonColor = false,
 		Text = "",
 		Parent = self.TabList
-	}, {corner(5)})
+	}, {corner(10)})
 	local buttonStroke = stroke(getThemeValue(self, "StrokeSoft"), 1, 0)
 	buttonStroke.Parent = button
 	local indicator = new("Frame", {
@@ -863,6 +954,24 @@ function Window:CreateTab(name, icon, description)
 		BackgroundTransparency = 1,
 		Parent = button
 	}, {corner(2)})
+	local iconImage = new("ImageLabel", {
+		Name = "IconImage",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(14, 8),
+		Size = UDim2.fromOffset(18, 18),
+		ScaleType = Enum.ScaleType.Fit,
+		Visible = tab.IconAsset ~= nil,
+		Parent = button
+	})
+	if tab.IconAsset then
+		iconImage.Image = tab.IconAsset.Image
+		if tab.IconAsset.ImageRectOffset then
+			iconImage.ImageRectOffset = tab.IconAsset.ImageRectOffset
+		end
+		if tab.IconAsset.ImageRectSize then
+			iconImage.ImageRectSize = tab.IconAsset.ImageRectSize
+		end
+	end
 	local iconLabel = new("TextLabel", {
 		Name = "Icon",
 		BackgroundTransparency = 1,
@@ -872,6 +981,7 @@ function Window:CreateTab(name, icon, description)
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = tab.Icon,
+		Visible = tab.IconAsset == nil,
 		Parent = button
 	})
 	local titleLabel = new("TextLabel", {
@@ -909,6 +1019,7 @@ function Window:CreateTab(name, icon, description)
 	tab.ButtonStroke = buttonStroke
 	tab.ButtonTitle = titleLabel
 	tab.ButtonIcon = iconLabel
+	tab.ButtonIconImage = iconImage
 	tab.ButtonAccent = indicator
 	tab.Page = page
 
@@ -941,8 +1052,8 @@ function Window:_createElement(tab, titleText, searchText, height)
 		ClipsDescendants = false,
 		Parent = tab.Page
 	}, {
-		corner(6),
-		padding(12, 12, 10, 10),
+		corner(12),
+		padding(14, 14, 12, 12),
 		listLayout(Enum.FillDirection.Vertical, 8)
 	})
 	frame:SetAttribute("SearchText", tostring(searchText or titleText or ""))
@@ -1699,8 +1810,8 @@ function Anchorline:CreateWindow(options)
 	local self = setmetatable({}, Window)
 	self.Title = tostring(options.Title or options.Name or "Anchorline")
 	self.Subtitle = tostring(options.Subtitle or options.LoadingSubtitle or "Reusable interface library")
-	self.Width = tonumber(options.Width) or 760
-	self.Height = tonumber(options.Height) or 500
+	self.Width = tonumber(options.Width) or 780
+	self.Height = tonumber(options.Height) or 520
 	self.SidebarWidth = tonumber(options.SidebarWidth) or 188
 	self.SidebarCollapsed = false
 	self.Hidden = false
@@ -1715,6 +1826,7 @@ function Anchorline:CreateWindow(options)
 	end
 	self.ThemeName = "Workbench"
 	self.Theme = Anchorline.Themes.Workbench
+	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide)
 
 	local parent = options.Parent or resolveParent()
 	local guiName = "Anchorline_" .. HttpService:GenerateGUID(false):gsub("-", "")
@@ -1727,15 +1839,16 @@ function Anchorline:CreateWindow(options)
 	})
 	self.Gui = gui
 
-	local root = new("Frame", {
+	local root = new("CanvasGroup", {
 		Name = "Window",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = options.Position or UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(self.Width, self.Height),
 		BackgroundTransparency = 0,
+		GroupTransparency = 0,
 		ClipsDescendants = true,
 		Parent = gui
-	}, {corner(6)})
+	}, {corner(25)})
 	self.Root = root
 	self:_track(root, {BackgroundColor3 = "Background"})
 	local rootStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
@@ -1744,16 +1857,15 @@ function Anchorline:CreateWindow(options)
 
 	local header = new("Frame", {
 		Name = "Header",
-		Size = UDim2.new(1, 0, 0, 52),
-		BackgroundTransparency = 0,
+		Size = UDim2.new(1, 0, 0, 58),
+		BackgroundTransparency = 1,
 		Parent = root
 	})
 	self.Header = header
-	self:_track(header, {BackgroundColor3 = "Panel"})
 	local headerLine = new("Frame", {
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, 0, 0, 1),
+		Position = UDim2.new(0, 24, 1, 0),
+		Size = UDim2.new(1, -48, 0, 1),
 		BorderSizePixel = 0,
 		Parent = header
 	})
@@ -1790,18 +1902,18 @@ function Anchorline:CreateWindow(options)
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(114, 28),
+		Size = UDim2.fromOffset(126, 34),
 		Parent = header
 	}, {listLayout(Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Right)})
 	local function controlButton(text)
 		local b = new("TextButton", {
-			Size = UDim2.fromOffset(32, 28),
+			Size = UDim2.fromOffset(36, 32),
 			Text = text,
 			Font = Enum.Font.GothamBold,
 			TextSize = 14,
 			AutoButtonColor = false,
 			Parent = controls
-		}, {corner(4), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+		}, {corner(10), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 		self:_track(b, {BackgroundColor3 = "Surface", TextColor3 = "TextMuted"})
 		b.MouseEnter:Connect(function()
 			b.BackgroundColor3 = getThemeValue(self, "SurfaceHover")
@@ -1818,13 +1930,12 @@ function Anchorline:CreateWindow(options)
 
 	local sidebar = new("Frame", {
 		Name = "Sidebar",
-		Position = UDim2.new(0, 0, 0, 52),
-		Size = UDim2.new(0, self.SidebarWidth, 1, -52),
-		BackgroundTransparency = 0,
+		Position = UDim2.new(0, 0, 0, 58),
+		Size = UDim2.new(0, self.SidebarWidth, 1, -58),
+		BackgroundTransparency = 1,
 		Parent = root
 	})
 	self.Sidebar = sidebar
-	self:_track(sidebar, {BackgroundColor3 = "Panel"})
 	local sidebarLine = new("Frame", {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
@@ -1848,13 +1959,12 @@ function Anchorline:CreateWindow(options)
 
 	local content = new("Frame", {
 		Name = "Content",
-		Position = UDim2.new(0, self.SidebarWidth, 0, 52),
-		Size = UDim2.new(1, -self.SidebarWidth, 1, -52),
-		BackgroundTransparency = 0,
+		Position = UDim2.new(0, self.SidebarWidth, 0, 58),
+		Size = UDim2.new(1, -self.SidebarWidth, 1, -58),
+		BackgroundTransparency = 1,
 		Parent = root
 	})
 	self.Content = content
-	self:_track(content, {BackgroundColor3 = "Background"})
 
 	local contentHeader = new("Frame", {
 		Name = "ContentHeader",
@@ -1896,7 +2006,7 @@ function Anchorline:CreateWindow(options)
 		Position = UDim2.new(1, -16, 0.5, 0),
 		Size = UDim2.fromOffset(210, 34),
 		Parent = contentHeader
-	}, {corner(5), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+	}, {corner(10), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 	self:_track(searchWrap, {BackgroundColor3 = "Input"})
 	local searchBox = new("TextBox", {
 		Name = "Search",
@@ -1941,8 +2051,8 @@ function Anchorline:CreateWindow(options)
 	local notificationList = new("Frame", {
 		Name = "Notifications",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -18, 0, 18),
-		Size = UDim2.fromOffset(320, 0),
+		Position = UDim2.new(1, -24, 0, 24),
+		Size = UDim2.fromOffset(340, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		Parent = gui,
