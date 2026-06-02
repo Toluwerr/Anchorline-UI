@@ -391,6 +391,69 @@ local function applyIconAssetToImageLabel(imageLabel, asset)
 	return true
 end
 
+local function centerIconImageObject(imageLabel, iconSize)
+	if not imageLabel then
+		return nil
+	end
+	imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	imageLabel.Position = UDim2.fromScale(0.5, 0.5)
+	if iconSize then
+		imageLabel.Size = UDim2.fromOffset(iconSize, iconSize)
+	end
+	imageLabel.BackgroundTransparency = 1
+	imageLabel.ScaleType = Enum.ScaleType.Fit
+	return imageLabel
+end
+
+local function centerVectorIconShapes(shapes, viewportSize)
+	viewportSize = tonumber(viewportSize) or 20
+	if type(shapes) ~= "table" or #shapes == 0 then
+		return shapes
+	end
+
+	local minX, minY = math.huge, math.huge
+	local maxX, maxY = -math.huge, -math.huge
+	local found = false
+
+	for _, shape in ipairs(shapes) do
+		if shape and shape:IsA("GuiObject") then
+			local x = shape.Position.X.Offset
+			local y = shape.Position.Y.Offset
+			local w = shape.Size.X.Offset
+			local h = shape.Size.Y.Offset
+			minX = math.min(minX, x)
+			minY = math.min(minY, y)
+			maxX = math.max(maxX, x + w)
+			maxY = math.max(maxY, y + h)
+			found = true
+		end
+	end
+
+	if not found then
+		return shapes
+	end
+
+	local width = maxX - minX
+	local height = maxY - minY
+	local dx = math.floor(((viewportSize - width) / 2 - minX) + 0.5)
+	local dy = math.floor(((viewportSize - height) / 2 - minY) + 0.5)
+
+	if dx ~= 0 or dy ~= 0 then
+		for _, shape in ipairs(shapes) do
+			if shape and shape:IsA("GuiObject") then
+				shape.Position = UDim2.new(
+					shape.Position.X.Scale,
+					shape.Position.X.Offset + dx,
+					shape.Position.Y.Scale,
+					shape.Position.Y.Offset + dy
+				)
+			end
+		end
+	end
+
+	return shapes
+end
+
 local function providerHasLucideApi(provider)
 	return type(provider) == "table" and (type(provider.GetAsset) == "function" or type(provider.ImageLabel) == "function")
 end
@@ -1371,6 +1434,7 @@ local function createVectorIcon(parent, iconName)
 		-- Unknown icon names intentionally render no letter fallback.
 		-- Valid icons should resolve through Lucide or through a Roblox image asset.
 	end
+	centerVectorIconShapes(shapes, 20)
 	return shapes
 end
 
@@ -2309,7 +2373,8 @@ function Window:CreateTab(name, icon, description)
 	local iconImage = new("ImageLabel", {
 		Name = "IconImage",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(4, 4),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(20, 20),
 		ScaleType = Enum.ScaleType.Fit,
 		Visible = tab.IconAsset ~= nil,
@@ -2321,7 +2386,8 @@ function Window:CreateTab(name, icon, description)
 	local iconHolder = new("Frame", {
 		Name = "VectorIcon",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(4, 4),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(20, 20),
 		Visible = tab.IconAsset == nil,
 		Parent = iconBox
@@ -4267,7 +4333,8 @@ function Tab:CreateHero(options)
 	if asset then
 		local image = new("ImageLabel", {
 			BackgroundTransparency = 1,
-			Position = UDim2.fromOffset(12, 12),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
 			Size = UDim2.fromOffset(24, 24),
 			ScaleType = Enum.ScaleType.Fit,
 			ImageColor3 = options.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, "Accent"),
@@ -4275,7 +4342,7 @@ function Tab:CreateHero(options)
 		})
 		applyIconAssetToImageLabel(image, asset)
 	else
-		local vector = new("Frame", {BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(20, 20), Parent = iconBox})
+		local vector = new("Frame", {BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(20, 20), Parent = iconBox})
 		local shapes = createVectorIcon(vector, options.Icon or titleText)
 		for _, shape in ipairs(shapes) do
 			if shape:IsA("TextLabel") then
@@ -4679,7 +4746,7 @@ function Tab:CreateToolbar(options)
 		window:_track(button, {BackgroundColor3 = tool.Primary and "Accent" or "Surface", TextColor3 = tool.Primary and "AccentText" or "Text"})
 		local asset = window:_resolveIcon(tool.Icon or tool.Image)
 		if asset then
-			local image = new("ImageLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(18, 18), ScaleType = Enum.ScaleType.Fit, ImageColor3 = tool.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, tool.Primary and "AccentText" or "Accent"), Parent = button})
+			local image = new("ImageLabel", {BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(19, 17), Size = UDim2.fromOffset(18, 18), ScaleType = Enum.ScaleType.Fit, ImageColor3 = tool.Tint == false and Color3.fromRGB(255, 255, 255) or getThemeValue(window, tool.Primary and "AccentText" or "Accent"), Parent = button})
 			applyIconAssetToImageLabel(image, asset)
 		end
 		local textLabel = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(asset and 34 or 10, 0), Size = UDim2.new(1, asset and -42 or -20, 1, 0), Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = label, Parent = button})
