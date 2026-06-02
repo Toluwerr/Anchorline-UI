@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.7.0"
+Anchorline.Version = "3.8.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.IconStyle = "Lucide"
@@ -6488,6 +6488,476 @@ anchorlineMetatable.__call = function(self, options)
 	return self:CreateWindow(options)
 end
 setmetatable(Anchorline, anchorlineMetatable)
+
+
+Anchorline.Version = "3.8.0"
+Anchorline.Appearance = Anchorline.Appearance or {}
+Anchorline.Appearance.Modernized = true
+Anchorline.Appearance.Depth = true
+Anchorline.Appearance.CardRadius = 16
+Anchorline.Appearance.TabRadius = 14
+
+local function anchorlineCreateGradient(parent, rotation, transparency)
+	local gradient = new("UIGradient", {
+		Rotation = rotation or 90,
+		Transparency = transparency or NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.56, 0.05),
+			NumberSequenceKeypoint.new(1, 0.16)
+		}),
+		Parent = parent
+	})
+	return gradient
+end
+
+local function anchorlineBindVisualSync(window, object, callback)
+	if not window or not object or type(callback) ~= "function" then
+		return
+	end
+	local function run()
+		if window.Root and window.Root.Parent and object.Parent then
+			callback()
+		end
+	end
+	run()
+	window._connections[#window._connections + 1] = window.Root:GetPropertyChangedSignal("Position"):Connect(run)
+	window._connections[#window._connections + 1] = window.Root:GetPropertyChangedSignal("Size"):Connect(run)
+	window._connections[#window._connections + 1] = window.Root:GetPropertyChangedSignal("Visible"):Connect(run)
+end
+
+local function anchorlineAddModernWindowDepth(window)
+	if not window or not window.Root or not window.Gui or window._modernVisualLayer then
+		return window
+	end
+	window._modernVisualLayer = true
+	window.Root.ZIndex = 20
+	local shadow = new("Frame", {
+		Name = "WindowSoftShadow",
+		AnchorPoint = window.Root.AnchorPoint,
+		Position = window.Root.Position + UDim2.fromOffset(0, 12),
+		Size = window.Root.Size,
+		BackgroundTransparency = 0.88,
+		BorderSizePixel = 0,
+		ZIndex = 4,
+		Parent = window.Gui
+	}, {
+		corner(27),
+		anchorlineCreateGradient(nil, 90, NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(0.6, 0.03),
+			NumberSequenceKeypoint.new(1, 0.18)
+		}))
+	})
+	shadow.UIGradient.Parent = shadow
+	window:_track(shadow, {BackgroundColor3 = "Overlay"})
+	anchorlineBindVisualSync(window, shadow, function()
+		shadow.AnchorPoint = window.Root.AnchorPoint
+		shadow.Position = window.Root.Position + UDim2.fromOffset(0, 12)
+		shadow.Size = window.Root.Size
+		shadow.Visible = window.Root.Visible
+	end)
+	local topLight = new("Frame", {
+		Name = "WindowTopLight",
+		Position = UDim2.fromOffset(1, 1),
+		Size = UDim2.new(1, -2, 0, 120),
+		BackgroundTransparency = 0.78,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+		Parent = window.Root
+	}, {
+		corner(24),
+		anchorlineCreateGradient(nil, 90, NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.08),
+			NumberSequenceKeypoint.new(0.55, 0.76),
+			NumberSequenceKeypoint.new(1, 1)
+		}))
+	})
+	topLight.UIGradient.Parent = topLight
+	window:_track(topLight, {BackgroundColor3 = "GlassHighlight"})
+	local bottomShade = new("Frame", {
+		Name = "WindowBottomShade",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 1, 1, -1),
+		Size = UDim2.new(1, -2, 0, 92),
+		BackgroundTransparency = 0.88,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+		Parent = window.Root
+	}, {
+		corner(24),
+		anchorlineCreateGradient(nil, 90, NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.55, 0.42),
+			NumberSequenceKeypoint.new(1, 0.16)
+		}))
+	})
+	bottomShade.UIGradient.Parent = bottomShade
+	window:_track(bottomShade, {BackgroundColor3 = "GlassShade"})
+	return window
+end
+
+local function anchorlineModernHover(window, button, normalKey, hoverKey, pressedOffset)
+	if not button or not window then
+		return
+	end
+	button.MouseEnter:Connect(function()
+		if button.Parent then
+			tween(button, 0.16, {BackgroundColor3 = getThemeValue(window, hoverKey or "SurfaceHover")}, Enum.EasingStyle.Quint)
+		end
+	end)
+	button.MouseLeave:Connect(function()
+		if button.Parent then
+			tween(button, 0.2, {BackgroundColor3 = getThemeValue(window, normalKey or "Surface")}, Enum.EasingStyle.Quint)
+		end
+	end)
+	button.MouseButton1Down:Connect(function()
+		if button.Parent then
+			local current = button.Position
+			button:SetAttribute("AnchorlinePressX", current.X.Offset)
+			button:SetAttribute("AnchorlinePressY", current.Y.Offset)
+			tween(button, 0.08, {Position = current + UDim2.fromOffset(0, pressedOffset or 1)}, Enum.EasingStyle.Quad)
+		end
+	end)
+	button.MouseButton1Up:Connect(function()
+		if button.Parent then
+			local x = button:GetAttribute("AnchorlinePressX")
+			local y = button:GetAttribute("AnchorlinePressY")
+			if type(x) == "number" and type(y) == "number" then
+				tween(button, 0.16, {Position = UDim2.new(button.Position.X.Scale, x, button.Position.Y.Scale, y)}, Enum.EasingStyle.Quint)
+			end
+		end
+	end)
+end
+
+local anchorlineModernNativeApplyTheme = Window._applyTheme
+function Window:_applyTheme()
+	anchorlineModernNativeApplyTheme(self)
+	if self._modernTitleAccent then
+		self._modernTitleAccent.BackgroundColor3 = getThemeValue(self, "Accent")
+	end
+end
+
+function Window:_styleTabButton(tab)
+	if not tab or not tab.Button then
+		return
+	end
+	local active = self.ActiveTab == tab
+	local iconColor = active and getThemeValue(self, "Accent") or getThemeValue(self, "TextFaint")
+	local buttonBackground = active and "Surface" or "Panel"
+	local buttonStroke = active and "Stroke" or "StrokeSoft"
+	local titleColor = active and "Text" or "TextMuted"
+	tween(tab.Button, 0.26, {BackgroundColor3 = getThemeValue(self, buttonBackground)}, Enum.EasingStyle.Quint)
+	if tab.ButtonStroke then
+		tab.ButtonStroke.Color = getThemeValue(self, buttonStroke)
+		tween(tab.ButtonStroke, 0.2, {Transparency = active and 0 or 0.28}, Enum.EasingStyle.Quint)
+	end
+	if tab.ButtonTitle then
+		tab.ButtonTitle.TextColor3 = getThemeValue(self, titleColor)
+	end
+	if tab.ButtonAccent then
+		tab.ButtonAccent.BackgroundColor3 = getThemeValue(self, "Accent")
+		tween(tab.ButtonAccent, 0.26, {
+			BackgroundTransparency = active and 0 or 1,
+			Size = active and UDim2.new(0, 4, 1, -14) or UDim2.new(0, 3, 1, -22)
+		}, Enum.EasingStyle.Quint)
+	end
+	if tab.ButtonIconBox then
+		tab.ButtonIconBox.BackgroundColor3 = active and getThemeValue(self, "AccentSoft") or getThemeValue(self, "SurfaceHover")
+		tween(tab.ButtonIconBox, 0.22, {BackgroundTransparency = active and 0.1 or 0.46}, Enum.EasingStyle.Quint)
+	end
+	if tab.ButtonIconImage then
+		tab.ButtonIconImage.ImageColor3 = iconColor
+		tab.ButtonIconImage.ImageTransparency = active and 0 or 0.2
+	end
+	if tab.ButtonIconShapes then
+		for _, shape in ipairs(tab.ButtonIconShapes) do
+			if shape:IsA("TextLabel") then
+				shape.TextColor3 = iconColor
+			elseif shape:GetAttribute("AnchorlineIconCutout") then
+				shape.BackgroundColor3 = tab.ButtonIconBox and tab.ButtonIconBox.BackgroundColor3 or getThemeValue(self, "Surface")
+			else
+				shape.BackgroundColor3 = iconColor
+			end
+		end
+	end
+end
+
+function Window:CreateTab(name, icon, description)
+	local tab = setmetatable({}, Tab)
+	tab.Window = self
+	tab.Name = tostring(name or "Tab")
+	tab.IconAsset = self:_resolveIcon(icon)
+	tab.Icon = tostring(icon or tab.Name):sub(1, 2)
+	tab.Description = description
+	tab.Elements = {}
+	local button = new("TextButton", {
+		Name = tab.Name .. "TabButton",
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundTransparency = self.FrostedGlass and 0.2 or 0,
+		AutoButtonColor = false,
+		Text = "",
+		Parent = self.TabList
+	}, {corner(14)})
+	local gradient = anchorlineCreateGradient(button, 90, NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.02),
+		NumberSequenceKeypoint.new(0.68, 0.06),
+		NumberSequenceKeypoint.new(1, 0.12)
+	}))
+	local buttonStroke = stroke(getThemeValue(self, "StrokeSoft"), 1, 0.22)
+	buttonStroke.Parent = button
+	local indicator = new("Frame", {
+		Name = "SelectionIndicator",
+		Position = UDim2.fromOffset(0, 8),
+		Size = UDim2.new(0, 3, 1, -16),
+		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		Parent = button
+	}, {corner(3)})
+	local iconBox = new("Frame", {
+		Name = "IconBox",
+		Position = UDim2.fromOffset(11, 6),
+		Size = UDim2.fromOffset(28, 28),
+		BackgroundTransparency = self.FrostedGlass and 0.42 or 0.55,
+		BorderSizePixel = 0,
+		Parent = button
+	}, {corner(10)})
+	self:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+	local iconImage = new("ImageLabel", {
+		Name = "IconImage",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(5, 5),
+		Size = UDim2.fromOffset(18, 18),
+		ScaleType = Enum.ScaleType.Fit,
+		Visible = tab.IconAsset ~= nil,
+		Parent = iconBox
+	})
+	if tab.IconAsset then
+		applyIconAssetToImageLabel(iconImage, tab.IconAsset)
+	end
+	local iconHolder = new("Frame", {
+		Name = "VectorIcon",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(4, 4),
+		Size = UDim2.fromOffset(20, 20),
+		Visible = tab.IconAsset == nil,
+		Parent = iconBox
+	})
+	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
+	if #iconShapes == 0 then
+		iconHolder.Visible = false
+	end
+	local titleLabel = new("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(50, 0),
+		Size = UDim2.new(1, -60, 1, 0),
+		Font = Enum.Font.GothamMedium,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = tab.Name,
+		Parent = button
+	})
+	local page = new("ScrollingFrame", {
+		Name = tab.Name .. "Page",
+		Size = UDim2.fromScale(1, 1),
+		CanvasSize = UDim2.fromOffset(0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		ScrollBarThickness = 4,
+		ScrollBarImageTransparency = 0.28,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = true,
+		Active = true,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+		Visible = false,
+		Parent = self.Pages
+	}, {
+		padding(18, 18, 16, 22),
+		listLayout(Enum.FillDirection.Vertical, 12)
+	})
+	self:_track(page, {ScrollBarImageColor3 = "Accent"})
+	local pageLayout = page:FindFirstChildOfClass("UIListLayout")
+	if pageLayout then
+		self._connections[#self._connections + 1] = pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			self:_updatePageCanvas(page)
+			self:_queueSmartResize()
+		end)
+	end
+	tab.Button = button
+	tab.ButtonStroke = buttonStroke
+	tab.ButtonTitle = titleLabel
+	tab.ButtonIcon = nil
+	tab.ButtonIconBox = iconBox
+	tab.ButtonIconImage = iconImage
+	tab.ButtonIconShapes = iconShapes
+	tab.ButtonAccent = indicator
+	tab.Page = page
+	button.MouseEnter:Connect(function()
+		if self.ActiveTab ~= tab then
+			tween(button, 0.16, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint)
+		end
+	end)
+	button.MouseLeave:Connect(function()
+		self:_styleTabButton(tab)
+	end)
+	button.MouseButton1Click:Connect(function()
+		self:_selectTab(tab)
+	end)
+	self.Tabs[#self.Tabs + 1] = tab
+	self:_styleTabButton(tab)
+	if not self.ActiveTab then
+		self:_selectTab(tab)
+	end
+	return tab
+end
+
+function Window:_createElement(tab, titleText, searchText, height)
+	local frame = new("Frame", {
+		Name = tostring(titleText or "Element"),
+		Size = UDim2.new(1, 0, 0, height or 54),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = self.FrostedGlass and 0.18 or 0,
+		ClipsDescendants = true,
+		Parent = tab.Page
+	}, {
+		corner(Anchorline.Appearance.CardRadius or 16),
+		padding(16, 16, 14, 14),
+		listLayout(Enum.FillDirection.Vertical, 9),
+		anchorlineCreateGradient(nil, 90, NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.62, 0.04),
+			NumberSequenceKeypoint.new(1, 0.1)
+		}))
+	})
+	local gradient = frame:FindFirstChildOfClass("UIGradient")
+	if gradient then gradient.Parent = frame end
+	frame:SetAttribute("SearchText", tostring(searchText or titleText or ""))
+	frame:SetAttribute("AnchorlineMinWidth", 340)
+	local s = stroke(getThemeValue(self, "StrokeSoft"), 1, 0.1)
+	s.Parent = frame
+	self:_track(frame, {BackgroundColor3 = "PanelAlt"})
+	self:_track(s, {Color = "StrokeSoft"})
+	tab.Elements[#tab.Elements + 1] = frame
+	local elementLayout = frame:FindFirstChildOfClass("UIListLayout")
+	if elementLayout then
+		self._connections[#self._connections + 1] = elementLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			self:_queueSmartResize()
+		end)
+	end
+	self:_queueSmartResize()
+	return frame
+end
+
+function Tab:CreateGlassCard(options)
+	options = options or {}
+	local window = self.Window
+	local name = tostring(options.Name or options.Title or "Glass Card")
+	local description = options.Description or options.Content or options.Text or ""
+	local height = tonumber(options.Height) or (description ~= "" and 92 or 68)
+	local frame = window:_createElement(self, name, name .. " " .. tostring(description), height)
+	self:_headerRow(frame, name, description)
+	return {Type = "GlassCard", Frame = frame}
+end
+
+function Tab:CreateSectionHeader(options)
+	options = options or {}
+	local window = self.Window
+	local titleText = tostring(options.Name or options.Title or "Section")
+	local subtitleText = tostring(options.Description or options.Subtitle or "")
+	local frame = new("Frame", {
+		Name = titleText,
+		Size = UDim2.new(1, 0, 0, subtitleText ~= "" and 54 or 34),
+		BackgroundTransparency = 1,
+		Parent = self.Page
+	})
+	frame:SetAttribute("SearchText", titleText .. " " .. subtitleText)
+	local accent = new("Frame", {
+		Position = UDim2.fromOffset(0, 5),
+		Size = UDim2.fromOffset(4, subtitleText ~= "" and 40 or 24),
+		BorderSizePixel = 0,
+		Parent = frame
+	}, {corner(3)})
+	window:_track(accent, {BackgroundColor3 = "Accent"})
+	local title = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(14, 0),
+		Size = UDim2.new(1, -14, 0, 24),
+		Font = Enum.Font.GothamBold,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = titleText,
+		Parent = frame
+	})
+	window:_track(title, {TextColor3 = "Text"})
+	if subtitleText ~= "" then
+		local subtitle = new("TextLabel", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(14, 25),
+			Size = UDim2.new(1, -14, 0, 20),
+			Font = Enum.Font.Gotham,
+			TextSize = 12,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Text = subtitleText,
+			Parent = frame
+		})
+		window:_track(subtitle, {TextColor3 = "TextMuted"})
+	end
+	self.Elements[#self.Elements + 1] = frame
+	window:_queueSmartResize()
+	return {Type = "SectionHeader", Frame = frame}
+end
+
+function Tab:CreatePill(options)
+	options = options or {}
+	local window = self.Window
+	local text = tostring(options.Text or options.Name or options.Title or "Pill")
+	local frame = window:_createElement(self, text, text, 54)
+	frame.AutomaticSize = Enum.AutomaticSize.None
+	local label = new("TextLabel", {
+		BackgroundTransparency = window.FrostedGlass and 0.28 or 0,
+		Size = UDim2.fromOffset(math.max(90, #text * 7 + 34), 28),
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		Text = text,
+		Parent = frame
+	}, {corner(14), stroke(getThemeValue(window, "StrokeSoft"), 1, 0.12)})
+	window:_track(label, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+	return {Type = "Pill", Frame = frame, Label = label}
+end
+
+Tab.CreateModernCard = Tab.CreateGlassCard
+Tab.CreatePanelCard = Tab.CreateGlassCard
+Tab.CreateModernHeader = Tab.CreateSectionHeader
+Tab.CreatePillBadge = Tab.CreatePill
+
+local anchorlineModernNativeCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	local window = anchorlineModernNativeCreateWindow(self, options)
+	anchorlineAddModernWindowDepth(window)
+	if window and window.Header and not window._modernTitleAccent then
+		local accent = new("Frame", {
+			Name = "TitleAccent",
+			Position = UDim2.fromOffset(18, 49),
+			Size = UDim2.fromOffset(34, 3),
+			BackgroundColor3 = getThemeValue(window, "Accent"),
+			BorderSizePixel = 0,
+			BackgroundTransparency = 0.12,
+			Parent = window.Header
+		}, {corner(2)})
+		window._modernTitleAccent = accent
+	end
+	return window
+end
+
+local anchorlineModernMetatable = getmetatable(Anchorline) or {}
+anchorlineModernMetatable.__call = function(self, options)
+	return self:CreateWindow(options)
+end
+setmetatable(Anchorline, anchorlineModernMetatable)
 
 
 return Anchorline
