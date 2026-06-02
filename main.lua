@@ -1126,9 +1126,6 @@ function getBundledLucideAsset(icon, size)
 end
 
 local function createVectorIcon(parent, iconName)
-	if Anchorline.IconStyle == "Lucide" then
-		return createTextFallbackIcon(parent, iconName)
-	end
 	local name = normalizeIconName(iconName)
 	if name == "" then
 		name = "toolbox"
@@ -2393,6 +2390,7 @@ function Window:CreateTab(name, icon, description)
 		Parent = iconBox
 	})
 	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
+	centerVectorIconShapes(iconShapes, 20)
 	if #iconShapes == 0 then
 		iconHolder.Visible = false
 	end
@@ -5962,6 +5960,7 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 		new("UIScale", {Scale = scale, Parent = inner})
 	end
 	local shapes = createVectorIcon(inner, icon)
+	centerVectorIconShapes(shapes, 20)
 	for _, shapeObject in ipairs(shapes) do
 		if shapeObject:IsA("TextLabel") then
 			shapeObject.TextColor3 = color or getThemeValue(window, "Accent")
@@ -6675,6 +6674,8 @@ local function anchorlineMakeIcon(window, parent, icon, size, color, backgroundC
 	local holder = new("Frame", {
 		Name = "IconHolder",
 		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size or 24, size or 24),
 		Parent = parent
 	})
