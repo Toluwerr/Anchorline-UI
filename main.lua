@@ -1,9 +1,12 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.4.0"
+Anchorline.Version = "3.5.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
+Anchorline.IconStyle = "Lucide"
+Anchorline.LucideProvider = nil
+Anchorline.IconProvider = nil
 Anchorline.Motion = {
 	Micro = 0.14,
 	Fast = 0.24,
@@ -366,29 +369,128 @@ local function resolveIconAssetFromTable(value)
 	return data
 end
 
-local function findLucideProvider(explicitProvider)
-	if type(explicitProvider) == "table" and type(explicitProvider.GetAsset) == "function" then
-		return explicitProvider
+local function providerHasLucideApi(provider)
+	return type(provider) == "table" and (type(provider.GetAsset) == "function" or type(provider.ImageLabel) == "function")
+end
+
+local function requireLucideModule(module)
+	if not module or not module:IsA("ModuleScript") then
+		return nil
 	end
-	if type(Anchorline.IconProvider) == "table" and type(Anchorline.IconProvider.GetAsset) == "function" then
-		return Anchorline.IconProvider
+	local ok, provider = pcall(require, module)
+	if ok and providerHasLucideApi(provider) then
+		return provider
 	end
-	local candidates = {
-		ReplicatedStorage:FindFirstChild("Lucide"),
-		ReplicatedStorage:FindFirstChild("LucideIcons"),
-		ReplicatedStorage:FindFirstChild("lucide-roblox")
-	}
-	for _, module in ipairs(candidates) do
-		if module and module:IsA("ModuleScript") then
-			local ok, provider = pcall(require, module)
-			if ok and type(provider) == "table" and type(provider.GetAsset) == "function" then
-				return provider
+	return nil
+end
+
+local function getGlobalLucideProvider()
+	local containers = {_G}
+	if type(getgenv) == "function" then
+		local ok, env = pcall(getgenv)
+		if ok and type(env) == "table" then
+			containers[#containers + 1] = env
+		end
+	end
+	for _, env in ipairs(containers) do
+		for _, key in ipairs({"AnchorlineLucide", "Lucide", "LucideIcons", "lucide"}) do
+			local candidate = rawget(env, key)
+			if providerHasLucideApi(candidate) then
+				return candidate
 			end
 		end
 	end
 	return nil
 end
 
+local function findModuleByPath(root, segments)
+	local current = root
+	for _, segment in ipairs(segments) do
+		if not current then return nil end
+		current = current:FindFirstChild(segment)
+	end
+	if current and current:IsA("ModuleScript") then
+		return current
+	end
+	return nil
+end
+
+local function findLucideProvider(explicitProvider)
+	if providerHasLucideApi(explicitProvider) then
+		return explicitProvider
+	end
+	if typeof(explicitProvider) == "Instance" and explicitProvider:IsA("ModuleScript") then
+		local provider = requireLucideModule(explicitProvider)
+		if provider then return provider end
+	end
+	if providerHasLucideApi(Anchorline.LucideProvider) then
+		return Anchorline.LucideProvider
+	end
+	if providerHasLucideApi(Anchorline.IconProvider) then
+		return Anchorline.IconProvider
+	end
+	local globalProvider = getGlobalLucideProvider()
+	if globalProvider then
+		Anchorline.LucideProvider = globalProvider
+		Anchorline.IconProvider = globalProvider
+		return globalProvider
+	end
+
+	local roots = {ReplicatedStorage}
+	local replicatedFirst = safeGetService("ReplicatedFirst")
+	local starterGui = safeGetService("StarterGui")
+	if replicatedFirst then roots[#roots + 1] = replicatedFirst end
+	if starterGui then roots[#roots + 1] = starterGui end
+	if LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui") then
+		roots[#roots + 1] = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	end
+
+	local commonPaths = {
+		{"Lucide"},
+		{"LucideIcons"},
+		{"lucide-roblox"},
+		{"lucide-icons"},
+		{"Packages", "Lucide"},
+		{"Packages", "LucideIcons"},
+		{"Packages", "lucide-roblox"},
+		{"Packages", "lucide-icons"},
+		{"Packages", "_Index", "latte-soft_lucide-icons@0.1.3", "lucide-icons"},
+		{"Packages", "_Index", "latte-soft_lucide-icons@0.1.2", "lucide-icons"},
+		{"Packages", "_Index", "virtualbutfake_lucide-roblox@1.1.2", "lucide-roblox"},
+	}
+
+	for _, root in ipairs(roots) do
+		for _, path in ipairs(commonPaths) do
+			local module = findModuleByPath(root, path)
+			local provider = requireLucideModule(module)
+			if provider then
+				Anchorline.LucideProvider = provider
+				Anchorline.IconProvider = provider
+				return provider
+			end
+		end
+	end
+
+	for _, root in ipairs(roots) do
+		local scanned = 0
+		for _, descendant in ipairs(root:GetDescendants()) do
+			scanned += 1
+			if scanned > 220 then break end
+			if descendant:IsA("ModuleScript") then
+				local lowerName = descendant.Name:lower()
+				if lowerName:find("lucide", 1, true) then
+					local provider = requireLucideModule(descendant)
+					if provider then
+						Anchorline.LucideProvider = provider
+						Anchorline.IconProvider = provider
+						return provider
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
 local function fileAvailable()
 	return type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function" and type(makefolder) == "function" and type(isfolder) == "function"
 end
@@ -600,6 +702,10 @@ function Window:SetTheme(theme)
 	return self
 end
 
+
+local getLucideIconCandidates
+local getLucideAssetFromProvider
+
 function Window:_resolveIcon(icon)
 	if icon == nil or icon == "" then
 		return nil
@@ -618,34 +724,165 @@ function Window:_resolveIcon(icon)
 		if isRobloxImagePath(icon) then
 			return {Image = icon}
 		end
+		self.IconProvider = self.IconProvider or findLucideProvider(Anchorline.LucideProvider or Anchorline.IconProvider)
 		local provider = self.IconProvider
 		if provider then
-			local candidates = {icon, normalizeIconName(icon)}
-			local function parseAsset(asset)
-				if type(asset) == "string" then
-					if isNumericAssetString(asset) then
-						return {Image = "rbxassetid://" .. asset}
-					elseif isRobloxImagePath(asset) then
-						return {Image = asset}
-					end
-				end
-				return resolveIconAssetFromTable(asset)
+			local parsed = getLucideAssetFromProvider(provider, icon, 48)
+			if parsed then
+				return parsed
 			end
-			for _, candidate in ipairs(candidates) do
-				if type(provider.GetAsset) == "function" then
-					local ok, asset = pcall(provider.GetAsset, provider, candidate, 48)
-					local parsed = ok and parseAsset(asset) or nil
-					if parsed then return parsed end
-					ok, asset = pcall(provider.GetAsset, candidate, 48)
-					parsed = ok and parseAsset(asset) or nil
-					if parsed then return parsed end
-					ok, asset = pcall(provider.GetAsset, provider, candidate)
-					parsed = ok and parseAsset(asset) or nil
-					if parsed then return parsed end
-					ok, asset = pcall(provider.GetAsset, candidate)
-					parsed = ok and parseAsset(asset) or nil
-					if parsed then return parsed end
+		end
+	end
+	return nil
+end
+
+local function createTextFallbackIcon(parent, iconName)
+	local initial = tostring(iconName or "A"):match("%w") or "A"
+	local label = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Enum.Font.GothamBold,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		Text = tostring(initial):sub(1, 1):upper(),
+		Parent = parent
+	})
+	return {label}
+end
+
+function getLucideIconCandidates(icon)
+	local name = normalizeIconName(icon)
+	if name == "" then
+		name = "circle"
+	end
+	local aliases = {
+		["analytics"] = {"bar-chart-3", "bar-chart", "chart-column"},
+		["stats"] = {"bar-chart-3", "bar-chart", "chart-column"},
+		["results"] = {"clipboard-list", "list-checks", "bar-chart-3"},
+		["chart"] = {"bar-chart-3", "bar-chart"},
+		["trend"] = {"line-chart", "chart-line", "activity"},
+		["warning"] = {"alert-triangle", "triangle-alert", "circle-alert"},
+		["alert"] = {"alert-triangle", "triangle-alert", "circle-alert"},
+		["success"] = {"check-circle", "circle-check", "check"},
+		["error"] = {"x-circle", "circle-x", "x"},
+		["close"] = {"x", "x-circle"},
+		["script"] = {"code", "terminal", "file-code"},
+		["notification"] = {"bell", "bell-ring"},
+		["toolbox"] = {"wrench", "briefcase", "hammer"},
+		["tools"] = {"wrench", "settings"},
+		["test"] = {"beaker", "flask-conical", "test-tube"},
+		["flask"] = {"flask-conical", "beaker", "test-tube"},
+		["esp"] = {"eye", "scan-eye"},
+		["visuals"] = {"eye", "scan-eye"},
+		["main"] = {"home", "panel-left"},
+		["config"] = {"settings", "sliders-horizontal"},
+		["players"] = {"users", "user-round"},
+		["user"] = {"user", "user-round"},
+		["users"] = {"users", "users-round"},
+		["aim"] = {"crosshair", "target"},
+		["power"] = {"zap", "bolt"},
+		["files"] = {"folder", "files"},
+		["docs"] = {"book-open-text", "book-open", "book"},
+		["tasks"] = {"clipboard-list", "list-checks", "clipboard-check"},
+		["paint"] = {"palette", "paintbrush"},
+		["color"] = {"palette", "paintbrush"},
+		["controls"] = {"sliders-horizontal", "sliders"},
+		["database"] = {"database", "server"},
+		["document"] = {"file-text", "file"},
+		["run"] = {"play", "circle-play"},
+		["reload"] = {"refresh-cw", "rotate-cw"},
+		["delete"] = {"trash-2", "trash"},
+		["secure"] = {"lock", "shield-check"},
+		["network"] = {"wifi", "router"},
+		["menu-list"] = {"list", "list-checks"},
+		["bar-chart"] = {"bar-chart-3", "bar-chart"},
+		["bar-chart-2"] = {"bar-chart-2", "bar-chart-3", "bar-chart"},
+		["chart-bar"] = {"bar-chart-3", "bar-chart"},
+		["clipboard"] = {"clipboard-list", "clipboard"},
+		["clipboard-list"] = {"clipboard-list", "list-checks", "clipboard"},
+		["file"] = {"file-text", "file"},
+		["file-text"] = {"file-text", "file"},
+		["alert-triangle"] = {"alert-triangle", "triangle-alert"},
+		["check-circle"] = {"check-circle", "circle-check"},
+		["x-circle"] = {"x-circle", "circle-x"},
+		["zap"] = {"zap", "bolt"},
+		["activity"] = {"activity", "chart-no-axes-column-increasing"},
+		["sliders"] = {"sliders-horizontal", "sliders"},
+		["sliders-horizontal"] = {"sliders-horizontal", "sliders"},
+		["magnifying-glass"] = {"search"},
+		["wrench"] = {"wrench", "settings"},
+		["target"] = {"target", "crosshair"},
+		["shield"] = {"shield", "shield-check"},
+		["terminal"] = {"terminal", "square-terminal"},
+		["home"] = {"home", "house"},
+		["settings"] = {"settings", "cog"},
+		["download"] = {"download", "download-cloud"},
+		["upload"] = {"upload", "upload-cloud"},
+		["copy"] = {"copy", "copy-check"},
+		["search"] = {"search"},
+		["server"] = {"server", "database"},
+		["folder"] = {"folder", "folder-open"},
+		["lock"] = {"lock"},
+		["unlock"] = {"unlock"},
+		["wifi"] = {"wifi"},
+		["bug"] = {"bug"},
+		["rocket"] = {"rocket"},
+		["pause"] = {"pause"},
+		["play"] = {"play"},
+		["trash"] = {"trash-2", "trash"},
+		["info"] = {"info"},
+		["bell"] = {"bell"},
+		["eye"] = {"eye"},
+		["code"] = {"code", "file-code"},
+		["book"] = {"book-open", "book"},
+	}
+	local output = {}
+	local seen = {}
+	local function push(value)
+		value = normalizeIconName(value)
+		if value ~= "" and not seen[value] then
+			seen[value] = true
+			output[#output + 1] = value
+		end
+	end
+	push(name)
+	if aliases[name] then
+		for _, value in ipairs(aliases[name]) do push(value) end
+	end
+	return output
+end
+
+function getLucideAssetFromProvider(provider, icon, size)
+	if not providerHasLucideApi(provider) then
+		return nil
+	end
+	local candidates = getLucideIconCandidates(icon)
+	for _, candidate in ipairs(candidates) do
+		if type(provider.GetAsset) == "function" then
+			for _, args in ipairs({
+				{provider, candidate, size or 48},
+				{candidate, size or 48},
+				{provider, candidate},
+				{candidate},
+			}) do
+				local ok, asset = pcall(provider.GetAsset, table.unpack(args))
+				local parsed = ok and resolveIconAssetFromTable(asset) or nil
+				if parsed then
+					return parsed, candidate
 				end
+			end
+		end
+		if type(provider.ImageLabel) == "function" then
+			local ok, image = pcall(provider.ImageLabel, candidate, size or 48, {BackgroundTransparency = 1})
+			if ok and image and image:IsA("ImageLabel") then
+				local data = {
+					Image = image.Image,
+					ImageRectOffset = image.ImageRectOffset,
+					ImageRectSize = image.ImageRectSize
+				}
+				image:Destroy()
+				return data, candidate
 			end
 		end
 	end
@@ -653,6 +890,9 @@ function Window:_resolveIcon(icon)
 end
 
 local function createVectorIcon(parent, iconName)
+	if Anchorline.IconStyle == "Lucide" then
+		return createTextFallbackIcon(parent, iconName)
+	end
 	local name = normalizeIconName(iconName)
 	if name == "" then
 		name = "toolbox"
@@ -4812,10 +5052,30 @@ function Anchorline:SetFlag(flag, value)
 end
 
 function Anchorline:SetIconProvider(provider)
-	if type(provider) == "table" then
+	local resolved = findLucideProvider(provider)
+	if resolved then
+		Anchorline.IconProvider = resolved
+		Anchorline.LucideProvider = resolved
+	elseif type(provider) == "table" then
 		Anchorline.IconProvider = provider
+		Anchorline.LucideProvider = provider
 	end
 	return Anchorline
+end
+
+function Anchorline:UseLucide(provider)
+	local resolved = findLucideProvider(provider)
+	if resolved then
+		Anchorline.IconProvider = resolved
+		Anchorline.LucideProvider = resolved
+	end
+	return Anchorline
+end
+
+Anchorline.SetLucideProvider = Anchorline.UseLucide
+
+function Anchorline:HasLucide()
+	return findLucideProvider(Anchorline.LucideProvider or Anchorline.IconProvider) ~= nil
 end
 
 function Anchorline:SetTheme(name, theme)
