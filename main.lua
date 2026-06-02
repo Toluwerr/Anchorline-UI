@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.6.0"
+Anchorline.Version = "2.6.2"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 Anchorline.Motion = {
@@ -17,6 +17,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local TextService = game:GetService("TextService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
@@ -104,6 +105,24 @@ local function listLayout(direction, paddingAmount, alignment)
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		HorizontalAlignment = alignment or Enum.HorizontalAlignment.Left
 	})
+end
+
+local function measureWrappedText(text, textSize, font, width)
+	local safeText = tostring(text or "")
+	local safeWidth = math.max(96, tonumber(width) or 260)
+	local safeSize = tonumber(textSize) or 13
+	local safeFont = font or Enum.Font.Gotham
+	if safeText == "" then
+		return math.ceil(safeSize * 1.15)
+	end
+	local ok, measured = pcall(function()
+		return TextService:GetTextSize(safeText, safeSize, safeFont, Vector2.new(safeWidth, 100000))
+	end)
+	if ok and measured then
+		return math.max(math.ceil(safeSize * 1.15), math.ceil(measured.Y))
+	end
+	local approximateLines = math.max(1, math.ceil(#safeText / math.max(20, math.floor(safeWidth / math.max(6, safeSize * 0.52)))))
+	return math.ceil(approximateLines * safeSize * 1.35)
 end
 
 local function isTyping()
@@ -686,19 +705,29 @@ function Window:_updatePageCanvas(page)
 	local layout = page:FindFirstChildOfClass("UIListLayout")
 	local contentHeight = 0
 	if layout then
-		contentHeight = layout.AbsoluteContentSize.Y
-	else
-		for _, child in ipairs(page:GetChildren()) do
-			if child:IsA("GuiObject") and child.Visible then
-				contentHeight = math.max(contentHeight, child.Position.Y.Offset + child.AbsoluteSize.Y)
+		contentHeight = math.max(contentHeight, layout.AbsoluteContentSize.Y)
+	end
+	for _, child in ipairs(page:GetChildren()) do
+		if child:IsA("GuiObject") and child.Visible then
+			local scaleY = child.Position.Y.Scale ~= 0 and child.Position.Y.Scale * math.max(0, page.AbsoluteSize.Y) or 0
+			local bottom = scaleY + child.Position.Y.Offset + child.AbsoluteSize.Y
+			if child.Size.Y.Scale ~= 0 and child.AbsoluteSize.Y <= 1 then
+				bottom = scaleY + child.Position.Y.Offset + (child.Size.Y.Scale * math.max(0, page.AbsoluteSize.Y)) + child.Size.Y.Offset
 			end
+			contentHeight = math.max(contentHeight, bottom)
 		end
 	end
-	local canvasHeight = math.max(0, math.ceil(contentHeight + padTop + padBottom + 10))
+	local bottomReserve = tonumber(self.ScrollBottomPadding) or 56
+	local canvasHeight = math.max(0, math.ceil(contentHeight + padTop + padBottom + bottomReserve))
 	page.AutomaticCanvasSize = Enum.AutomaticSize.None
 	page.CanvasSize = UDim2.fromOffset(0, canvasHeight)
 	page.ScrollingDirection = Enum.ScrollingDirection.Y
 	page.ScrollingEnabled = true
+	page.Active = true
+	local maxScroll = math.max(0, canvasHeight - math.max(0, page.AbsoluteSize.Y))
+	if page.CanvasPosition.Y > maxScroll then
+		page.CanvasPosition = Vector2.new(page.CanvasPosition.X, maxScroll)
+	end
 	return canvasHeight
 end
 
@@ -766,16 +795,22 @@ function Window:SmartResize(animated)
 		return self
 	end
 	if animated then
-		tween(self.Root, 0.5, {Size = targetSize}, Enum.EasingStyle.Quint)
+		tween(self.Root, 0.52, {Size = targetSize}, Enum.EasingStyle.Quint)
 	else
 		self.Root.Size = targetSize
 	end
-	task.defer(function()
+	self.Width = targetWidth
+	self.Height = targetHeight
+	local function deferredRefresh()
 		if self.Root and self.Root.Parent then
 			self:_refreshAdaptiveLayouts()
 			self:_refreshPageCanvases()
 		end
-	end)
+	end
+	task.defer(deferredRefresh)
+	task.delay(0.08, deferredRefresh)
+	task.delay(0.24, deferredRefresh)
+	task.delay(0.56, deferredRefresh)
 	return self
 end
 
@@ -991,7 +1026,10 @@ function Window:_makeResizable()
 		local newWidth = math.clamp(startSize.X + delta.X, minWidth, maxWidth)
 		local newHeight = math.clamp(startSize.Y + delta.Y, minHeight, maxHeight)
 		self.Root.Size = UDim2.fromOffset(newWidth, newHeight)
+		self.Width = newWidth
+		self.Height = newHeight
 		self:_refreshAdaptiveLayouts()
+		self:_refreshPageCanvases()
 	end)
 end
 
@@ -1576,6 +1614,7 @@ end
 
 function Tab:CreateLabel(text)
 	local frame = self.Window:_createElement(self, tostring(text or "Label"), tostring(text or "Label"), 42)
+	frame.AutomaticSize = Enum.AutomaticSize.None
 	local label = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 20),
@@ -1587,10 +1626,34 @@ function Tab:CreateLabel(text)
 		Parent = frame
 	})
 	self.Window:_track(label, {TextColor3 = "TextMuted"})
+	local lastWidth = -1
+	local function resizeLabel(force)
+		if not frame or not frame.Parent then
+			return
+		end
+		local width = math.floor(frame.AbsoluteSize.X)
+		if width <= 40 then
+			width = math.max(300, tonumber(self.Window.SmartContentMinWidth) or 390)
+		end
+		if not force and math.abs(width - lastWidth) < 2 then
+			return
+		end
+		lastWidth = width
+		local h = measureWrappedText(label.Text, 13, Enum.Font.Gotham, math.max(140, width - 28))
+		label.Size = UDim2.new(1, 0, 0, h)
+		frame.Size = UDim2.new(1, 0, 0, math.max(42, h + 24))
+		self.Window:_refreshPageCanvases()
+	end
+	self.Window._connections[#self.Window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		resizeLabel(false)
+	end)
+	task.defer(function() resizeLabel(true) end)
 	local controller = {}
 	function controller:Set(value)
 		label.Text = tostring(value)
 		frame:SetAttribute("SearchText", tostring(value))
+		lastWidth = -1
+		resizeLabel(true)
 	end
 	function controller:Get()
 		return label.Text
@@ -1603,11 +1666,11 @@ function Tab:CreateParagraph(options)
 	local titleText = tostring(options.Title or options.Name or "Paragraph")
 	local bodyText = tostring(options.Content or options.Text or "")
 	local frame = self.Window:_createElement(self, titleText, titleText .. " " .. bodyText, 70)
+	frame.AutomaticSize = Enum.AutomaticSize.None
 	self:_headerRow(frame, titleText, "")
 	local label = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
 		Font = Enum.Font.Gotham,
 		TextSize = 13,
 		TextWrapped = true,
@@ -1617,10 +1680,36 @@ function Tab:CreateParagraph(options)
 		Parent = frame
 	})
 	self.Window:_track(label, {TextColor3 = "TextMuted"})
+	local lastWidth = -1
+	local function resizeParagraph(force)
+		if not frame or not frame.Parent then
+			return
+		end
+		local width = math.floor(frame.AbsoluteSize.X)
+		if width <= 40 then
+			width = math.max(300, tonumber(self.Window.SmartContentMinWidth) or 390)
+		end
+		if not force and math.abs(width - lastWidth) < 2 then
+			return
+		end
+		lastWidth = width
+		local textWidth = math.max(140, width - 28)
+		local bodyHeight = measureWrappedText(label.Text, 13, Enum.Font.Gotham, textWidth)
+		label.Size = UDim2.new(1, 0, 0, bodyHeight)
+		frame.Size = UDim2.new(1, 0, 0, math.max(70, 26 + 8 + bodyHeight + 24))
+		self.Window:_refreshPageCanvases()
+	end
+	self.Window._connections[#self.Window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		resizeParagraph(false)
+	end)
+	task.defer(function() resizeParagraph(true) end)
+	task.delay(0.1, function() resizeParagraph(true) end)
 	local controller = {}
 	function controller:Set(value)
 		label.Text = tostring(value)
 		frame:SetAttribute("SearchText", titleText .. " " .. tostring(value))
+		lastWidth = -1
+		resizeParagraph(true)
 	end
 	function controller:Get()
 		return label.Text
@@ -2370,50 +2459,83 @@ function Tab:CreateInfoBox(options)
 		BorderSizePixel = 0,
 		Parent = frame
 	}, {corner(2)})
-	local contentWrap = new("Frame", {
-		Name = "Content",
+	local title = new("TextLabel", {
+		Name = "Title",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(16, 0),
-		Size = UDim2.new(1, -16, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.fromOffset(16, 12),
+		Size = UDim2.new(1, -30, 0, 20),
+		Font = Enum.Font.GothamMedium,
+		TextSize = 14,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = name,
 		Parent = frame
-	}, {listLayout(Enum.FillDirection.Vertical, 6)})
-	self:_headerRow(contentWrap, name, "")
+	})
+	window:_track(title, {TextColor3 = "Text"})
 	local label = new("TextLabel", {
+		Name = "Body",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.fromOffset(16, 38),
+		Size = UDim2.new(1, -30, 0, 20),
 		Font = Enum.Font.Gotham,
 		TextSize = 13,
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = body,
-		Parent = contentWrap
+		Parent = frame
 	})
 	window:_track(label, {TextColor3 = "TextMuted"})
-	local contentLayout = contentWrap:FindFirstChildOfClass("UIListLayout")
-	local function resizeBox()
+	local lastWidth = -1
+	local resizeQueued = false
+	local function resizeBox(force)
 		if not frame or not frame.Parent then
 			return
 		end
-		local contentHeight = contentLayout and contentLayout.AbsoluteContentSize.Y or 48
-		local height = math.max(76, math.ceil(contentHeight + 26))
+		local width = math.floor(frame.AbsoluteSize.X)
+		if width <= 40 then
+			width = math.max(300, tonumber(window.SmartContentMinWidth) or 390)
+		end
+		if not force and math.abs(width - lastWidth) < 2 then
+			return
+		end
+		lastWidth = width
+		local textWidth = math.max(140, width - 48)
+		local bodyHeight = measureWrappedText(body, 13, Enum.Font.Gotham, textWidth)
+		local titleHeight = measureWrappedText(name, 14, Enum.Font.GothamMedium, textWidth)
+		title.Size = UDim2.new(1, -30, 0, math.max(20, titleHeight))
+		label.Position = UDim2.fromOffset(16, 18 + math.max(20, titleHeight) + 8)
+		label.Size = UDim2.new(1, -30, 0, bodyHeight)
+		local height = math.max(74, 18 + math.max(20, titleHeight) + 8 + bodyHeight + 18)
 		frame.Size = UDim2.new(1, 0, 0, height)
+		strip.Position = UDim2.fromOffset(0, 14)
 		strip.Size = UDim2.new(0, 4, 1, -28)
-		window:_queueSmartResize()
+		window:_refreshPageCanvases()
 	end
-	if contentLayout then
-		window._connections[#window._connections + 1] = contentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeBox)
+	local function queueResize(force)
+		if resizeQueued then
+			return
+		end
+		resizeQueued = true
+		task.defer(function()
+			resizeQueued = false
+			resizeBox(force)
+			window:_queueSmartResize()
+		end)
 	end
-	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeBox)
-	task.defer(resizeBox)
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		queueResize(false)
+	end)
+	queueResize(true)
+	task.delay(0.1, function() resizeBox(true) end)
 	local controller = {}
 	function controller:Set(value)
 		body = tostring(value or "")
 		label.Text = body
 		frame:SetAttribute("SearchText", name .. " " .. body)
-		resizeBox()
+		lastWidth = -1
+		queueResize(true)
 	end
 	function controller:Get()
 		return body
@@ -2814,6 +2936,7 @@ function Anchorline:CreateWindow(options)
 	self.SmartResizeEnabled = options.SmartResize ~= false
 	self.SmartViewportMargin = tonumber(options.SmartViewportMargin) or 44
 	self.SmartContentMinWidth = tonumber(options.SmartContentMinWidth) or 390
+	self.ScrollBottomPadding = tonumber(options.ScrollBottomPadding) or 64
 	self.MinWidth = tonumber(options.MinWidth) or 560
 	self.MinHeight = tonumber(options.MinHeight) or 390
 	self.MaxWidth = tonumber(options.MaxWidth) or 1040
