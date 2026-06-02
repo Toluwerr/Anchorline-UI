@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "1.0.0"
+Anchorline.Version = "1.1.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 
@@ -139,84 +139,124 @@ local function resolveParent()
 end
 
 Anchorline.Themes = {
+	Foundry = {
+		Background = Color3.fromRGB(12, 14, 16),
+		Panel = Color3.fromRGB(17, 20, 23),
+		PanelAlt = Color3.fromRGB(22, 25, 29),
+		Surface = Color3.fromRGB(27, 31, 36),
+		SurfaceHover = Color3.fromRGB(34, 39, 45),
+		Input = Color3.fromRGB(13, 16, 19),
+		Stroke = Color3.fromRGB(45, 52, 60),
+		StrokeSoft = Color3.fromRGB(34, 40, 47),
+		Text = Color3.fromRGB(232, 236, 241),
+		TextMuted = Color3.fromRGB(151, 160, 171),
+		TextFaint = Color3.fromRGB(99, 109, 121),
+		Accent = Color3.fromRGB(125, 164, 139),
+		AccentSoft = Color3.fromRGB(35, 55, 44),
+		AccentText = Color3.fromRGB(8, 11, 10),
+		Success = Color3.fromRGB(91, 178, 123),
+		Warning = Color3.fromRGB(205, 162, 88),
+		Danger = Color3.fromRGB(203, 83, 83),
+		Overlay = Color3.fromRGB(0, 0, 0)
+	},
 	Graphite = {
-		Background = Color3.fromRGB(17, 18, 21),
-		Panel = Color3.fromRGB(24, 26, 31),
-		PanelAlt = Color3.fromRGB(30, 33, 39),
-		Surface = Color3.fromRGB(36, 39, 46),
-		SurfaceHover = Color3.fromRGB(44, 48, 56),
-		Input = Color3.fromRGB(20, 22, 26),
-		Stroke = Color3.fromRGB(64, 68, 78),
-		StrokeSoft = Color3.fromRGB(44, 48, 56),
-		Text = Color3.fromRGB(241, 243, 247),
-		TextMuted = Color3.fromRGB(167, 173, 185),
-		TextFaint = Color3.fromRGB(118, 125, 139),
-		Accent = Color3.fromRGB(88, 142, 255),
-		AccentSoft = Color3.fromRGB(31, 58, 116),
-		AccentText = Color3.fromRGB(255, 255, 255),
-		Success = Color3.fromRGB(55, 179, 113),
-		Warning = Color3.fromRGB(236, 174, 61),
-		Danger = Color3.fromRGB(230, 83, 83),
+		Background = Color3.fromRGB(12, 14, 16),
+		Panel = Color3.fromRGB(17, 20, 23),
+		PanelAlt = Color3.fromRGB(22, 25, 29),
+		Surface = Color3.fromRGB(27, 31, 36),
+		SurfaceHover = Color3.fromRGB(34, 39, 45),
+		Input = Color3.fromRGB(13, 16, 19),
+		Stroke = Color3.fromRGB(45, 52, 60),
+		StrokeSoft = Color3.fromRGB(34, 40, 47),
+		Text = Color3.fromRGB(232, 236, 241),
+		TextMuted = Color3.fromRGB(151, 160, 171),
+		TextFaint = Color3.fromRGB(99, 109, 121),
+		Accent = Color3.fromRGB(125, 164, 139),
+		AccentSoft = Color3.fromRGB(35, 55, 44),
+		AccentText = Color3.fromRGB(8, 11, 10),
+		Success = Color3.fromRGB(91, 178, 123),
+		Warning = Color3.fromRGB(205, 162, 88),
+		Danger = Color3.fromRGB(203, 83, 83),
 		Overlay = Color3.fromRGB(0, 0, 0)
 	},
-	Paper = {
-		Background = Color3.fromRGB(238, 240, 244),
-		Panel = Color3.fromRGB(255, 255, 255),
-		PanelAlt = Color3.fromRGB(247, 248, 251),
-		Surface = Color3.fromRGB(241, 243, 247),
-		SurfaceHover = Color3.fromRGB(232, 235, 241),
+	Slate = {
+		Background = Color3.fromRGB(16, 17, 19),
+		Panel = Color3.fromRGB(22, 24, 27),
+		PanelAlt = Color3.fromRGB(27, 30, 34),
+		Surface = Color3.fromRGB(33, 37, 42),
+		SurfaceHover = Color3.fromRGB(42, 47, 53),
+		Input = Color3.fromRGB(18, 20, 23),
+		Stroke = Color3.fromRGB(55, 61, 69),
+		StrokeSoft = Color3.fromRGB(40, 45, 52),
+		Text = Color3.fromRGB(235, 237, 240),
+		TextMuted = Color3.fromRGB(156, 163, 174),
+		TextFaint = Color3.fromRGB(104, 112, 124),
+		Accent = Color3.fromRGB(150, 164, 180),
+		AccentSoft = Color3.fromRGB(48, 55, 64),
+		AccentText = Color3.fromRGB(13, 15, 17),
+		Success = Color3.fromRGB(88, 174, 120),
+		Warning = Color3.fromRGB(205, 160, 82),
+		Danger = Color3.fromRGB(201, 82, 82),
+		Overlay = Color3.fromRGB(0, 0, 0)
+	},
+	Porcelain = {
+		Background = Color3.fromRGB(235, 237, 240),
+		Panel = Color3.fromRGB(248, 249, 250),
+		PanelAlt = Color3.fromRGB(242, 244, 246),
+		Surface = Color3.fromRGB(232, 235, 239),
+		SurfaceHover = Color3.fromRGB(223, 227, 233),
 		Input = Color3.fromRGB(255, 255, 255),
-		Stroke = Color3.fromRGB(202, 208, 219),
-		StrokeSoft = Color3.fromRGB(222, 226, 234),
-		Text = Color3.fromRGB(31, 35, 43),
-		TextMuted = Color3.fromRGB(91, 99, 114),
-		TextFaint = Color3.fromRGB(134, 142, 155),
-		Accent = Color3.fromRGB(52, 111, 235),
-		AccentSoft = Color3.fromRGB(219, 229, 255),
+		Stroke = Color3.fromRGB(186, 194, 204),
+		StrokeSoft = Color3.fromRGB(211, 216, 224),
+		Text = Color3.fromRGB(31, 35, 41),
+		TextMuted = Color3.fromRGB(92, 101, 113),
+		TextFaint = Color3.fromRGB(133, 143, 156),
+		Accent = Color3.fromRGB(89, 127, 102),
+		AccentSoft = Color3.fromRGB(216, 228, 220),
 		AccentText = Color3.fromRGB(255, 255, 255),
-		Success = Color3.fromRGB(43, 145, 92),
-		Warning = Color3.fromRGB(184, 128, 29),
-		Danger = Color3.fromRGB(199, 58, 58),
+		Success = Color3.fromRGB(69, 146, 94),
+		Warning = Color3.fromRGB(168, 124, 56),
+		Danger = Color3.fromRGB(183, 67, 67),
 		Overlay = Color3.fromRGB(0, 0, 0)
 	},
-	Moss = {
-		Background = Color3.fromRGB(19, 24, 21),
-		Panel = Color3.fromRGB(27, 34, 30),
-		PanelAlt = Color3.fromRGB(33, 42, 37),
-		Surface = Color3.fromRGB(40, 51, 45),
-		SurfaceHover = Color3.fromRGB(49, 62, 55),
-		Input = Color3.fromRGB(22, 29, 25),
-		Stroke = Color3.fromRGB(69, 85, 76),
-		StrokeSoft = Color3.fromRGB(49, 63, 55),
-		Text = Color3.fromRGB(237, 244, 239),
-		TextMuted = Color3.fromRGB(169, 184, 174),
-		TextFaint = Color3.fromRGB(117, 134, 123),
-		Accent = Color3.fromRGB(74, 170, 114),
-		AccentSoft = Color3.fromRGB(30, 72, 48),
-		AccentText = Color3.fromRGB(255, 255, 255),
-		Success = Color3.fromRGB(96, 204, 137),
-		Warning = Color3.fromRGB(226, 171, 63),
-		Danger = Color3.fromRGB(228, 88, 88),
+	Evergreen = {
+		Background = Color3.fromRGB(13, 17, 15),
+		Panel = Color3.fromRGB(18, 25, 21),
+		PanelAlt = Color3.fromRGB(24, 32, 28),
+		Surface = Color3.fromRGB(31, 41, 36),
+		SurfaceHover = Color3.fromRGB(39, 51, 45),
+		Input = Color3.fromRGB(15, 20, 17),
+		Stroke = Color3.fromRGB(50, 65, 57),
+		StrokeSoft = Color3.fromRGB(37, 49, 43),
+		Text = Color3.fromRGB(231, 238, 232),
+		TextMuted = Color3.fromRGB(151, 168, 157),
+		TextFaint = Color3.fromRGB(99, 119, 107),
+		Accent = Color3.fromRGB(112, 165, 130),
+		AccentSoft = Color3.fromRGB(34, 66, 46),
+		AccentText = Color3.fromRGB(7, 12, 9),
+		Success = Color3.fromRGB(103, 193, 133),
+		Warning = Color3.fromRGB(204, 165, 86),
+		Danger = Color3.fromRGB(199, 82, 82),
 		Overlay = Color3.fromRGB(0, 0, 0)
 	},
 	Clay = {
-		Background = Color3.fromRGB(31, 25, 22),
-		Panel = Color3.fromRGB(42, 34, 29),
-		PanelAlt = Color3.fromRGB(51, 42, 36),
-		Surface = Color3.fromRGB(60, 50, 43),
-		SurfaceHover = Color3.fromRGB(71, 59, 51),
-		Input = Color3.fromRGB(34, 28, 25),
-		Stroke = Color3.fromRGB(91, 75, 64),
-		StrokeSoft = Color3.fromRGB(69, 57, 49),
-		Text = Color3.fromRGB(250, 241, 232),
-		TextMuted = Color3.fromRGB(202, 185, 169),
-		TextFaint = Color3.fromRGB(151, 133, 118),
-		Accent = Color3.fromRGB(231, 132, 78),
-		AccentSoft = Color3.fromRGB(102, 53, 35),
-		AccentText = Color3.fromRGB(255, 255, 255),
-		Success = Color3.fromRGB(76, 177, 112),
-		Warning = Color3.fromRGB(237, 181, 83),
-		Danger = Color3.fromRGB(230, 83, 83),
+		Background = Color3.fromRGB(27, 23, 21),
+		Panel = Color3.fromRGB(35, 30, 27),
+		PanelAlt = Color3.fromRGB(43, 37, 33),
+		Surface = Color3.fromRGB(52, 45, 40),
+		SurfaceHover = Color3.fromRGB(62, 53, 47),
+		Input = Color3.fromRGB(30, 26, 23),
+		Stroke = Color3.fromRGB(77, 66, 58),
+		StrokeSoft = Color3.fromRGB(60, 52, 46),
+		Text = Color3.fromRGB(244, 237, 229),
+		TextMuted = Color3.fromRGB(190, 177, 164),
+		TextFaint = Color3.fromRGB(133, 120, 108),
+		Accent = Color3.fromRGB(177, 130, 93),
+		AccentSoft = Color3.fromRGB(73, 49, 36),
+		AccentText = Color3.fromRGB(18, 12, 8),
+		Success = Color3.fromRGB(92, 174, 118),
+		Warning = Color3.fromRGB(206, 160, 84),
+		Danger = Color3.fromRGB(199, 82, 82),
 		Overlay = Color3.fromRGB(0, 0, 0)
 	}
 }
@@ -228,8 +268,8 @@ local Tab = {}
 Tab.__index = Tab
 
 local function getThemeValue(window, key)
-	local theme = window.Theme or Anchorline.Themes.Graphite
-	return theme[key] or Anchorline.Themes.Graphite[key] or Color3.fromRGB(255, 255, 255)
+	local theme = window.Theme or Anchorline.Themes.Foundry
+	return theme[key] or Anchorline.Themes.Foundry[key] or Color3.fromRGB(255, 255, 255)
 end
 
 function Window:_track(instance, propertyMap)
@@ -261,13 +301,13 @@ end
 function Window:SetTheme(theme)
 	if type(theme) == "string" then
 		self.ThemeName = theme
-		self.Theme = Anchorline.Themes[theme] or Anchorline.Themes.Graphite
+		self.Theme = Anchorline.Themes[theme] or Anchorline.Themes.Foundry
 	elseif type(theme) == "table" then
 		self.ThemeName = "Custom"
 		self.Theme = theme
 	else
-		self.ThemeName = "Graphite"
-		self.Theme = Anchorline.Themes.Graphite
+		self.ThemeName = "Foundry"
+		self.Theme = Anchorline.Themes.Foundry
 	end
 	self:_applyTheme()
 	return self
@@ -277,16 +317,24 @@ function Window:_styleTabButton(tab)
 	if not tab or not tab.Button then
 		return
 	end
-	if self.ActiveTab == tab then
-		tab.Button.BackgroundColor3 = getThemeValue(self, "Accent")
-		tab.ButtonStroke.Color = getThemeValue(self, "Accent")
-		tab.ButtonTitle.TextColor3 = getThemeValue(self, "AccentText")
-		tab.ButtonIcon.TextColor3 = getThemeValue(self, "AccentText")
+	local active = self.ActiveTab == tab
+	if active then
+		tab.Button.BackgroundColor3 = getThemeValue(self, "Surface")
+		tab.ButtonStroke.Color = getThemeValue(self, "Stroke")
+		tab.ButtonTitle.TextColor3 = getThemeValue(self, "Text")
+		tab.ButtonIcon.TextColor3 = getThemeValue(self, "Accent")
+		if tab.ButtonAccent then
+			tab.ButtonAccent.BackgroundColor3 = getThemeValue(self, "Accent")
+			tab.ButtonAccent.BackgroundTransparency = 0
+		end
 	else
-		tab.Button.BackgroundColor3 = getThemeValue(self, "PanelAlt")
+		tab.Button.BackgroundColor3 = getThemeValue(self, "Panel")
 		tab.ButtonStroke.Color = getThemeValue(self, "StrokeSoft")
 		tab.ButtonTitle.TextColor3 = getThemeValue(self, "TextMuted")
-		tab.ButtonIcon.TextColor3 = getThemeValue(self, "TextMuted")
+		tab.ButtonIcon.TextColor3 = getThemeValue(self, "TextFaint")
+		if tab.ButtonAccent then
+			tab.ButtonAccent.BackgroundTransparency = 1
+		end
 	end
 end
 
@@ -667,7 +715,7 @@ function Window:Prompt(options)
 		ZIndex = 81,
 		Parent = overlay
 	}, {
-		corner(12),
+		corner(6),
 		stroke(getThemeValue(self, "Stroke"), 1, 0),
 		padding(18, 18, 18, 18),
 		listLayout(Enum.FillDirection.Vertical, 10)
@@ -712,7 +760,7 @@ function Window:Prompt(options)
 		AutoButtonColor = false,
 		ZIndex = 83,
 		Parent = row
-	}, {corner(8), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+	}, {corner(5), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 	self:_track(cancel, {BackgroundColor3 = "Surface", TextColor3 = "Text"})
 	local confirm = new("TextButton", {
 		Size = UDim2.fromOffset(104, 34),
@@ -723,7 +771,7 @@ function Window:Prompt(options)
 		AutoButtonColor = false,
 		ZIndex = 83,
 		Parent = row
-	}, {corner(8)})
+	}, {corner(5)})
 	self:_track(confirm, {BackgroundColor3 = "Accent", TextColor3 = "AccentText"})
 	local closed = false
 	local function close(value)
@@ -775,21 +823,29 @@ function Window:CreateTab(name, icon, description)
 
 	local button = new("TextButton", {
 		Name = tab.Name .. "TabButton",
-		Size = UDim2.new(1, 0, 0, 38),
+		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundTransparency = 0,
 		AutoButtonColor = false,
 		Text = "",
 		Parent = self.TabList
-	}, {corner(8)})
+	}, {corner(5)})
 	local buttonStroke = stroke(getThemeValue(self, "StrokeSoft"), 1, 0)
 	buttonStroke.Parent = button
+	local indicator = new("Frame", {
+		Name = "SelectionIndicator",
+		Position = UDim2.fromOffset(0, 7),
+		Size = UDim2.new(0, 3, 1, -14),
+		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		Parent = button
+	}, {corner(2)})
 	local iconLabel = new("TextLabel", {
 		Name = "Icon",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(12, 0),
-		Size = UDim2.fromOffset(22, 38),
+		Size = UDim2.fromOffset(22, 34),
 		Font = Enum.Font.GothamBold,
-		TextSize = 13,
+		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = tab.Icon,
 		Parent = button
@@ -829,6 +885,7 @@ function Window:CreateTab(name, icon, description)
 	tab.ButtonStroke = buttonStroke
 	tab.ButtonTitle = titleLabel
 	tab.ButtonIcon = iconLabel
+	tab.ButtonAccent = indicator
 	tab.Page = page
 
 	button.MouseEnter:Connect(function()
@@ -860,7 +917,7 @@ function Window:_createElement(tab, titleText, searchText, height)
 		ClipsDescendants = false,
 		Parent = tab.Page
 	}, {
-		corner(9),
+		corner(6),
 		padding(12, 12, 10, 10),
 		listLayout(Enum.FillDirection.Vertical, 8)
 	})
@@ -1021,7 +1078,7 @@ function Tab:CreateButton(options)
 		TextSize = 13,
 		AutoButtonColor = false,
 		Parent = row
-	}, {corner(8)})
+	}, {corner(5)})
 	self.Window:_track(button, {BackgroundColor3 = "Accent", TextColor3 = "AccentText"})
 	button.MouseEnter:Connect(function()
 		tween(button, 0.12, {BackgroundColor3 = getThemeValue(self.Window, "Accent")})
@@ -1203,7 +1260,7 @@ function Tab:CreateInput(options)
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = frame
-	}, {corner(8), padding(10, 10, 0, 0), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	}, {corner(5), padding(10, 10, 0, 0), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	self.Window:_track(box, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
 	local controller = {Type = "Input", Flag = options.Flag}
 	function controller:Set(newValue, loading)
@@ -1262,7 +1319,7 @@ function Tab:CreateDropdown(options)
 		Text = "",
 		AutoButtonColor = false,
 		Parent = frame
-	}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	self.Window:_track(button, {BackgroundColor3 = "Input"})
 	local selectedText = new("TextLabel", {
 		BackgroundTransparency = 1,
@@ -1338,7 +1395,7 @@ function Tab:CreateDropdown(options)
 				TextXAlignment = Enum.TextXAlignment.Left,
 				AutoButtonColor = false,
 				Parent = list
-			}, {corner(7), padding(10, 10, 0, 0)})
+			}, {corner(4), padding(10, 10, 0, 0)})
 			self.Window:_track(optionButton, {TextColor3 = "Text", BackgroundColor3 = "Surface"})
 			optionButton.MouseButton1Click:Connect(function()
 				if multiple then
@@ -1423,7 +1480,7 @@ function Tab:CreateKeybind(options)
 		TextSize = 13,
 		AutoButtonColor = false,
 		Parent = row
-	}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	self.Window:_track(button, {BackgroundColor3 = "Input", TextColor3 = "Text"})
 	local controller = {Type = "Keybind", Flag = options.Flag}
 	function controller:Set(newValue, loading)
@@ -1525,7 +1582,7 @@ function Tab:CreateColorPicker(options)
 		Text = "",
 		AutoButtonColor = false,
 		Parent = row
-	}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	local fields = new("Frame", {
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(54, 0),
@@ -1544,7 +1601,7 @@ function Tab:CreateColorPicker(options)
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Parent = fields
-		}, {corner(7), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		}, {corner(4), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 		self.Window:_track(box, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
 		boxes[labelText] = box
 		return box
@@ -1618,9 +1675,9 @@ function Anchorline:CreateWindow(options)
 	local self = setmetatable({}, Window)
 	self.Title = tostring(options.Title or options.Name or "Anchorline")
 	self.Subtitle = tostring(options.Subtitle or options.LoadingSubtitle or "Reusable interface library")
-	self.Width = tonumber(options.Width) or 720
-	self.Height = tonumber(options.Height) or 500
-	self.SidebarWidth = tonumber(options.SidebarWidth) or 176
+	self.Width = tonumber(options.Width) or 700
+	self.Height = tonumber(options.Height) or 480
+	self.SidebarWidth = tonumber(options.SidebarWidth) or 164
 	self.SidebarCollapsed = false
 	self.Hidden = false
 	self.Minimized = false
@@ -1632,8 +1689,8 @@ function Anchorline:CreateWindow(options)
 	if self.Configuration.Enabled == nil then
 		self.Configuration.Enabled = false
 	end
-	self.ThemeName = "Graphite"
-	self.Theme = Anchorline.Themes.Graphite
+	self.ThemeName = "Foundry"
+	self.Theme = Anchorline.Themes.Foundry
 
 	local parent = options.Parent or resolveParent()
 	local guiName = "Anchorline_" .. HttpService:GenerateGUID(false):gsub("-", "")
@@ -1654,7 +1711,7 @@ function Anchorline:CreateWindow(options)
 		BackgroundTransparency = 0,
 		ClipsDescendants = true,
 		Parent = gui
-	}, {corner(12)})
+	}, {corner(6)})
 	self.Root = root
 	self:_track(root, {BackgroundColor3 = "Background"})
 	local rootStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
@@ -1681,7 +1738,7 @@ function Anchorline:CreateWindow(options)
 		Name = "Title",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(18, 8),
-		Size = UDim2.new(1, -170, 0, 20),
+		Size = UDim2.new(1, -150, 0, 20),
 		Font = Enum.Font.GothamBold,
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -1694,7 +1751,7 @@ function Anchorline:CreateWindow(options)
 		Name = "Subtitle",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(18, 29),
-		Size = UDim2.new(1, -170, 0, 16),
+		Size = UDim2.new(1, -150, 0, 16),
 		Font = Enum.Font.Gotham,
 		TextSize = 12,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -1709,18 +1766,18 @@ function Anchorline:CreateWindow(options)
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(132, 30),
+		Size = UDim2.fromOffset(114, 28),
 		Parent = header
 	}, {listLayout(Enum.FillDirection.Horizontal, 6, Enum.HorizontalAlignment.Right)})
 	local function controlButton(text)
 		local b = new("TextButton", {
-			Size = UDim2.fromOffset(36, 30),
+			Size = UDim2.fromOffset(32, 28),
 			Text = text,
 			Font = Enum.Font.GothamBold,
 			TextSize = 14,
 			AutoButtonColor = false,
 			Parent = controls
-		}, {corner(7), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+		}, {corner(4), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 		self:_track(b, {BackgroundColor3 = "Surface", TextColor3 = "TextMuted"})
 		b.MouseEnter:Connect(function()
 			b.BackgroundColor3 = getThemeValue(self, "SurfaceHover")
@@ -1815,7 +1872,7 @@ function Anchorline:CreateWindow(options)
 		Position = UDim2.new(1, -16, 0.5, 0),
 		Size = UDim2.fromOffset(210, 34),
 		Parent = contentHeader
-	}, {corner(8), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+	}, {corner(5), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 	self:_track(searchWrap, {BackgroundColor3 = "Input"})
 	local searchBox = new("TextBox", {
 		Name = "Search",
@@ -1905,7 +1962,7 @@ function Anchorline:CreateWindow(options)
 		end
 	end)
 
-	self:SetTheme(options.Theme or "Graphite")
+	self:SetTheme(options.Theme or "Foundry")
 	Anchorline.Windows[#Anchorline.Windows + 1] = self
 	Anchorline.LastWindow = self
 
