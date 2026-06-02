@@ -1,41 +1,9 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.8.0"
+Anchorline.Version = "2.9.0"
 Anchorline.Flags = {}
-Anchorline.Windows = {}
-Anchorline.IconAliases = {
-	["📊"] = "bar-chart",
-	["📈"] = "bar-chart",
-	["📉"] = "bar-chart",
-	["⚙"] = "settings",
-	["⚙️"] = "settings",
-	["🏠"] = "home",
-	["👁"] = "eye",
-	["👁️"] = "eye",
-	["🎯"] = "target",
-	["🛡"] = "shield",
-	["🛡️"] = "shield",
-	["⚡"] = "bolt",
-	["📁"] = "folder",
-	["📂"] = "folder",
-	["📚"] = "book",
-	["📖"] = "book",
-	["ℹ"] = "info",
-	["ℹ️"] = "info",
-	["✅"] = "check",
-	["✓"] = "check",
-	["❌"] = "x",
-	["✕"] = "x",
-	["⚠"] = "warning",
-	["⚠️"] = "warning",
-	["💻"] = "code",
-	["⌨"] = "code",
-	["⌨️"] = "code",
-	["🔔"] = "bell",
-	["🧪"] = "test",
-	["🧰"] = "toolbox"
-}
+Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.Motion = {
 	Micro = 0.14,
 	Fast = 0.24,
@@ -209,12 +177,9 @@ local function normalizeIconName(value)
 	if type(value) ~= "string" then
 		return ""
 	end
-	local raw = tostring(value)
-	local alias = Anchorline.IconAliases[raw] or Anchorline.IconAliases[raw:lower()]
-	if alias then
-		return alias
-	end
-	return raw:lower():gsub("%s+", "-"):gsub("_", "-"):gsub("[^%w%-]", "")
+	local cleaned = tostring(value):lower():gsub("%s+", "-"):gsub("_", "-"):gsub("[^%w%-]", "")
+	cleaned = cleaned:gsub("%-+", "-"):gsub("^%-", ""):gsub("%-$", "")
+	return cleaned
 end
 
 local function isNumericAssetString(value)
@@ -713,6 +678,11 @@ function Window:_styleTabButton(tab)
 			tween(tab.ButtonAccent, 0.24, {BackgroundTransparency = 1, Size = UDim2.new(0, 3, 1, -16)}, Enum.EasingStyle.Quint)
 		end
 	end
+	if tab.ButtonIconBox then
+		local boxTransparency = active and (self.FrostedGlass and 0.12 or 0.08) or (self.FrostedGlass and 0.5 or 0.68)
+		tween(tab.ButtonIconBox, 0.24, {BackgroundTransparency = boxTransparency}, Enum.EasingStyle.Quint)
+		tab.ButtonIconBox.BackgroundColor3 = active and getThemeValue(self, "AccentSoft") or getThemeValue(self, "SurfaceHover")
+	end
 	if tab.ButtonIcon then
 		tab.ButtonIcon.TextColor3 = iconColor
 	end
@@ -797,7 +767,25 @@ function Window:_getPagePadding(page)
 	return pad.PaddingLeft.Offset, pad.PaddingRight.Offset, pad.PaddingTop.Offset, pad.PaddingBottom.Offset
 end
 
-function Window:_updatePageCanvas(page)
+function Window:_measureChildBottom(page, child)
+	if not page or not child or not child:IsA("GuiObject") or not child.Visible then
+		return 0
+	end
+	local pageHeight = math.max(0, page.AbsoluteSize.Y)
+	local positionOffset = child.Position.Y.Offset
+	if child.Position.Y.Scale ~= 0 then
+		positionOffset = positionOffset + child.Position.Y.Scale * pageHeight
+	end
+	local childHeight = child.AbsoluteSize.Y
+	if childHeight <= 1 and child.Size.Y.Scale ~= 0 then
+		childHeight = math.max(0, child.Size.Y.Scale * pageHeight + child.Size.Y.Offset)
+	end
+	local absoluteDelta = page.CanvasPosition.Y + (child.AbsolutePosition.Y - page.AbsolutePosition.Y) + child.AbsoluteSize.Y
+	local positionedBottom = positionOffset + childHeight
+	return math.max(positionedBottom, absoluteDelta)
+end
+
+function Window:_getPageContentHeight(page)
 	if not page or not page:IsA("ScrollingFrame") then
 		return 0
 	end
@@ -805,30 +793,35 @@ function Window:_updatePageCanvas(page)
 	local layout = page:FindFirstChildOfClass("UIListLayout")
 	local contentHeight = 0
 	if layout then
-		contentHeight = math.max(contentHeight, layout.AbsoluteContentSize.Y)
+		contentHeight = math.max(contentHeight, layout.AbsoluteContentSize.Y + padTop + padBottom)
 	end
 	for _, child in ipairs(page:GetChildren()) do
 		if child:IsA("GuiObject") and child.Visible then
-			local scaleY = child.Position.Y.Scale ~= 0 and child.Position.Y.Scale * math.max(0, page.AbsoluteSize.Y) or 0
-			local bottom = scaleY + child.Position.Y.Offset + child.AbsoluteSize.Y
-			if child.Size.Y.Scale ~= 0 and child.AbsoluteSize.Y <= 1 then
-				bottom = scaleY + child.Position.Y.Offset + (child.Size.Y.Scale * math.max(0, page.AbsoluteSize.Y)) + child.Size.Y.Offset
-			end
-			contentHeight = math.max(contentHeight, bottom)
+			contentHeight = math.max(contentHeight, self:_measureChildBottom(page, child) + padBottom)
 		end
 	end
-	local bottomReserve = tonumber(self.ScrollBottomPadding) or 56
-	local canvasHeight = math.max(0, math.ceil(contentHeight + padTop + padBottom + bottomReserve))
+	return math.max(0, math.ceil(contentHeight))
+end
+
+function Window:_updatePageCanvas(page)
+	if not page or not page:IsA("ScrollingFrame") then
+		return 0
+	end
+	local contentHeight = self:_getPageContentHeight(page)
+	local bottomReserve = math.max(32, tonumber(self.ScrollBottomPadding) or 64)
+	local viewportHeight = math.max(0, page.AbsoluteSize.Y)
+	local canvasHeight = math.max(viewportHeight, math.ceil(contentHeight + bottomReserve))
 	page.AutomaticCanvasSize = Enum.AutomaticSize.None
 	page.CanvasSize = UDim2.fromOffset(0, canvasHeight)
 	page.ScrollingDirection = Enum.ScrollingDirection.Y
 	page.ScrollingEnabled = true
 	page.Active = true
-	local maxScroll = math.max(0, canvasHeight - math.max(0, page.AbsoluteSize.Y))
+	page.ClipsDescendants = true
+	local maxScroll = math.max(0, canvasHeight - viewportHeight)
 	if page.CanvasPosition.Y > maxScroll then
 		page.CanvasPosition = Vector2.new(page.CanvasPosition.X, maxScroll)
 	end
-	return canvasHeight
+	return canvasHeight, contentHeight
 end
 
 function Window:_refreshPageCanvases()
@@ -844,7 +837,8 @@ function Window:_measureActiveContent()
 	local minimumContentWidth = tonumber(self.SmartContentMinWidth) or 390
 	local pageContentHeight = 0
 	if active and active.Page then
-		pageContentHeight = self:_updatePageCanvas(active.Page)
+		local _, measuredHeight = self:_updatePageCanvas(active.Page)
+		pageContentHeight = measuredHeight or 0
 		local pageWidth = math.max(0, active.Page.AbsoluteSize.X)
 		for _, element in ipairs(active.Elements or {}) do
 			if element and element.Parent and element.Visible then
@@ -855,28 +849,43 @@ function Window:_measureActiveContent()
 				minimumContentWidth = math.max(minimumContentWidth, elementWidth)
 			end
 		end
+		for _, child in ipairs(active.Page:GetChildren()) do
+			if child:IsA("GuiObject") and child.Visible then
+				local childMinWidth = tonumber(child:GetAttribute("AnchorlineMinWidth")) or 0
+				if childMinWidth <= 0 and child.AbsoluteSize.X > 0 then
+					childMinWidth = math.min(child.AbsoluteSize.X, pageWidth)
+				end
+				minimumContentWidth = math.max(minimumContentWidth, childMinWidth)
+			end
+		end
 	end
 	return minimumContentWidth, pageContentHeight
 end
 
 function Window:_calculateSmartSize()
 	local viewport = getViewportSize()
-	local margin = tonumber(self.SmartViewportMargin) or 44
+	local margin = math.max(12, tonumber(self.SmartViewportMargin) or 44)
 	local baseMinWidth = tonumber(self.MinWidth) or 560
 	local baseMinHeight = tonumber(self.MinHeight) or 390
-	local safeViewportWidth = math.max(baseMinWidth, viewport.X - margin)
-	local safeViewportHeight = math.max(baseMinHeight, viewport.Y - margin)
-	local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, safeViewportWidth)
-	local maxHeight = math.min(tonumber(self.MaxHeight) or 760, safeViewportHeight)
+	local availableWidth = math.max(baseMinWidth, viewport.X - margin * 2)
+	local availableHeight = math.max(baseMinHeight, viewport.Y - margin * 2)
+	local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, availableWidth)
+	local maxHeight = math.min(tonumber(self.MaxHeight) or 760, availableHeight)
 	local contentMinWidth, pageContentHeight = self:_measureActiveContent()
 	local sidebarWidth = self.SidebarCollapsed and 64 or self.SidebarWidth
-	local smartMinWidth = math.min(maxWidth, math.max(baseMinWidth, sidebarWidth + contentMinWidth + 42))
-	local smartMinHeight = math.min(maxHeight, math.max(baseMinHeight, 360))
-	local desiredWidth = math.max(tonumber(self.Width) or baseMinWidth, smartMinWidth)
-	local chromeHeight = 58 + 66 + 30
-	local desiredContentHeight = math.min(pageContentHeight, math.max(180, maxHeight - chromeHeight))
-	local desiredHeight = math.max(tonumber(self.Height) or baseMinHeight, chromeHeight + desiredContentHeight)
-	local targetWidth, targetHeight = clampVectorSize(desiredWidth, desiredHeight, smartMinWidth, smartMinHeight, maxWidth, maxHeight)
+	local outerGutter = 42
+	local smartMinWidth = math.min(maxWidth, math.max(baseMinWidth, sidebarWidth + contentMinWidth + outerGutter))
+	local chromeHeight = 58 + 66 + 38
+	local maximumScrollableContentHeight = math.max(180, maxHeight - chromeHeight)
+	local fittedContentHeight = math.min(pageContentHeight, maximumScrollableContentHeight)
+	local smartMinHeight = math.min(maxHeight, math.max(baseMinHeight, chromeHeight + math.min(fittedContentHeight, 260)))
+	local targetWidth = math.max(smartMinWidth, tonumber(self.Width) or baseMinWidth)
+	local targetHeight = math.max(smartMinHeight, chromeHeight + fittedContentHeight)
+	if self._manualSizeLocked then
+		targetWidth = math.max(targetWidth, tonumber(self.Width) or targetWidth)
+		targetHeight = math.max(targetHeight, tonumber(self.Height) or targetHeight)
+	end
+	targetWidth, targetHeight = clampVectorSize(targetWidth, targetHeight, smartMinWidth, smartMinHeight, maxWidth, maxHeight)
 	return targetWidth, targetHeight, smartMinWidth, smartMinHeight, maxWidth, maxHeight
 end
 
@@ -891,16 +900,16 @@ function Window:SmartResize(animated)
 	self._computedMinHeight = smartMinHeight
 	local targetSize = UDim2.fromOffset(targetWidth, targetHeight)
 	local currentSize = self.Root.AbsoluteSize
-	if math.abs(currentSize.X - targetWidth) < 1 and math.abs(currentSize.Y - targetHeight) < 1 then
-		return self
+	local needsResize = math.abs(currentSize.X - targetWidth) >= 1 or math.abs(currentSize.Y - targetHeight) >= 1
+	if needsResize then
+		if animated then
+			tween(self.Root, 0.46, {Size = targetSize}, Enum.EasingStyle.Quint)
+		else
+			self.Root.Size = targetSize
+		end
+		self.Width = targetWidth
+		self.Height = targetHeight
 	end
-	if animated then
-		tween(self.Root, 0.52, {Size = targetSize}, Enum.EasingStyle.Quint)
-	else
-		self.Root.Size = targetSize
-	end
-	self.Width = targetWidth
-	self.Height = targetHeight
 	local function deferredRefresh()
 		if self.Root and self.Root.Parent then
 			self:_refreshAdaptiveLayouts()
@@ -908,9 +917,10 @@ function Window:SmartResize(animated)
 		end
 	end
 	task.defer(deferredRefresh)
-	task.delay(0.08, deferredRefresh)
-	task.delay(0.24, deferredRefresh)
-	task.delay(0.56, deferredRefresh)
+	task.delay(0.04, deferredRefresh)
+	task.delay(0.12, deferredRefresh)
+	task.delay(0.28, deferredRefresh)
+	task.delay(0.5, deferredRefresh)
 	return self
 end
 
@@ -925,7 +935,7 @@ function Window:_queueSmartResize()
 		return
 	end
 	self._smartResizeQueued = true
-	task.delay(0.035, function()
+	task.delay(0.03, function()
 		self._smartResizeQueued = false
 		if self.Root and self.Root.Parent then
 			self:SmartResize(true)
@@ -1165,6 +1175,7 @@ function Window:_makeResizable()
 		end
 		stopResizing()
 		resizing = true
+		self._manualSizeLocked = true
 		resizeStart = input.Position
 		startSize = self.Root.AbsoluteSize
 		moveConnection = UserInputService.InputChanged:Connect(function(moveInput)
@@ -1566,14 +1577,23 @@ function Window:CreateTab(name, icon, description)
 		BackgroundTransparency = 1,
 		Parent = button
 	}, {corner(2)})
+	local iconBox = new("Frame", {
+		Name = "IconBox",
+		Position = UDim2.fromOffset(9, 5),
+		Size = UDim2.fromOffset(24, 24),
+		BackgroundTransparency = self.FrostedGlass and 0.42 or 0.58,
+		BorderSizePixel = 0,
+		Parent = button
+	}, {corner(8)})
+	self:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
 	local iconImage = new("ImageLabel", {
 		Name = "IconImage",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(13, 7),
+		Position = UDim2.fromOffset(2, 2),
 		Size = UDim2.fromOffset(20, 20),
 		ScaleType = Enum.ScaleType.Fit,
 		Visible = tab.IconAsset ~= nil,
-		Parent = button
+		Parent = iconBox
 	})
 	if tab.IconAsset then
 		iconImage.Image = tab.IconAsset.Image
@@ -1587,10 +1607,10 @@ function Window:CreateTab(name, icon, description)
 	local iconHolder = new("Frame", {
 		Name = "VectorIcon",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(13, 7),
+		Position = UDim2.fromOffset(2, 2),
 		Size = UDim2.fromOffset(20, 20),
 		Visible = tab.IconAsset == nil,
-		Parent = button
+		Parent = iconBox
 	})
 	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
 	local iconLabel = nil
@@ -1639,6 +1659,7 @@ function Window:CreateTab(name, icon, description)
 	tab.ButtonStroke = buttonStroke
 	tab.ButtonTitle = titleLabel
 	tab.ButtonIcon = iconLabel
+	tab.ButtonIconBox = iconBox
 	tab.ButtonIconImage = iconImage
 	tab.ButtonIconShapes = iconShapes
 	tab.ButtonAccent = indicator
@@ -3265,6 +3286,7 @@ function Window:BringToFront()
 end
 
 function Window:FitContent(animated)
+	self._manualSizeLocked = false
 	return self:SmartResize(animated ~= false)
 end
 
@@ -4468,24 +4490,6 @@ end
 function Anchorline:SetIconProvider(provider)
 	if type(provider) == "table" then
 		Anchorline.IconProvider = provider
-	end
-	return Anchorline
-end
-
-function Anchorline:SetIconAlias(alias, iconName)
-	if type(alias) == "string" and type(iconName) == "string" then
-		Anchorline.IconAliases[alias] = iconName
-	end
-	return Anchorline
-end
-
-function Anchorline:AddIconAliases(aliases)
-	if type(aliases) == "table" then
-		for alias, iconName in pairs(aliases) do
-			if type(alias) == "string" and type(iconName) == "string" then
-				Anchorline.IconAliases[alias] = iconName
-			end
-		end
 	end
 	return Anchorline
 end
