@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.9.0"
+Anchorline.Version = "3.0.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.Motion = {
@@ -163,6 +163,40 @@ local function tableToColor(value, fallback)
 		return Color3.fromRGB(math.clamp(r, 0, 255), math.clamp(g, 0, 255), math.clamp(b, 0, 255))
 	end
 	return fallback or Color3.fromRGB(255, 255, 255)
+end
+
+local function countDecimalPlaces(value)
+	local text = tostring(value or 0)
+	if text:find("e") or text:find("E") then
+		text = string.format("%.10f", tonumber(value) or 0)
+	end
+	local decimal = text:match("%.(%d+)")
+	if not decimal then
+		return 0
+	end
+	decimal = decimal:gsub("0+$", "")
+	return math.clamp(#decimal, 0, 6)
+end
+
+local function formatSliderNumber(value, increment, precision)
+	local places = tonumber(precision)
+	if not places then
+		places = countDecimalPlaces(increment)
+	end
+	places = math.clamp(math.floor(places), 0, 6)
+	local number = tonumber(value) or 0
+	local rounded = number
+	if places > 0 then
+		local scale = 10 ^ places
+		rounded = math.floor(number * scale + 0.5) / scale
+	else
+		rounded = math.floor(number + 0.5)
+	end
+	local formatted = string.format("%." .. tostring(places) .. "f", rounded)
+	if places > 0 then
+		formatted = formatted:gsub("(%..-)0+$", "%1"):gsub("%.$", "")
+	end
+	return formatted
 end
 
 local function isRobloxImagePath(value)
@@ -512,6 +546,26 @@ local function createVectorIcon(parent, iconName)
 	if name == "" then
 		name = "toolbox"
 	end
+
+	local aliases = {
+		["bar-chart-3"] = "bar-chart",
+		["bar-chart-2"] = "bar-chart",
+		["chart-bar"] = "bar-chart",
+		["clipboard-list"] = "clipboard",
+		["file-text"] = "file",
+		["alert-triangle"] = "warning",
+		["check-circle"] = "check",
+		["x-circle"] = "x",
+		["zap"] = "bolt",
+		["activity"] = "pulse",
+		["database"] = "server",
+		["sliders-horizontal"] = "sliders",
+		["palette"] = "color",
+		["magnifying-glass"] = "search",
+		["wrench"] = "tools"
+	}
+	name = aliases[name] or name
+
 	local shapes = {}
 	local function shape(className, props, children)
 		props = props or {}
@@ -541,106 +595,256 @@ local function createVectorIcon(parent, iconName)
 			Size = UDim2.fromOffset(w, h)
 		}, {corner(r or 2)})
 	end
+	local function ring(x, y, size, thickness)
+		local outer = rect(x, y, size, size, math.floor(size / 2))
+		local inner = shape("Frame", {
+			Position = UDim2.fromOffset(x + thickness, y + thickness),
+			Size = UDim2.fromOffset(size - thickness * 2, size - thickness * 2),
+			BackgroundTransparency = 0,
+			ZIndex = outer.ZIndex + 1
+		}, {corner(math.floor((size - thickness * 2) / 2))})
+		inner:SetAttribute("AnchorlineIconCutout", true)
+		return outer, inner
+	end
+	local function chevron(x, y, direction)
+		if direction == "right" then
+			line(x, y, 7, 2, 45, 1)
+			line(x, y + 5, 7, 2, -45, 1)
+		elseif direction == "left" then
+			line(x, y, 7, 2, -45, 1)
+			line(x, y + 5, 7, 2, 45, 1)
+		elseif direction == "down" then
+			line(x, y, 7, 2, 45, 1)
+			line(x + 5, y, 7, 2, -45, 1)
+		else
+			line(x, y + 5, 7, 2, -45, 1)
+			line(x + 5, y + 5, 7, 2, 45, 1)
+		end
+	end
+
 	if name == "bar-chart" or name == "analytics" or name == "stats" or name == "results" or name == "chart" then
-		rect(3, 11, 3, 6, 2)
-		rect(8, 7, 3, 10, 2)
-		rect(13, 4, 3, 13, 2)
-		line(2, 17, 16, 2, 0, 1)
+		line(3, 16, 14, 2, 0, 1)
+		rect(4, 11, 3, 5, 2)
+		rect(9, 7, 3, 9, 2)
+		rect(14, 4, 3, 12, 2)
+	elseif name == "line-chart" or name == "trend" then
+		line(3, 16, 14, 2, 0, 1)
+		line(4, 13, 5, 2, -28, 1)
+		line(8, 11, 4, 2, 24, 1)
+		line(11, 10, 6, 2, -38, 1)
+		dot(3, 12, 3)
+		dot(8, 9, 3)
+		dot(12, 10, 3)
+		dot(16, 6, 3)
 	elseif name == "info" or name == "help" then
-		dot(8, 3, 4)
-		line(9, 8, 2, 9, 0, 1)
-		line(7, 9, 4, 2, 0, 1)
-		line(7, 16, 6, 2, 0, 1)
+		ring(3, 3, 14, 2)
+		dot(9, 6, 2)
+		line(9, 9, 2, 5, 0, 1)
+		line(8, 14, 4, 2, 0, 1)
 	elseif name == "check" or name == "success" then
-		line(4, 10, 6, 2, 45, 1)
-		line(8, 11, 10, 2, -45, 1)
+		ring(3, 3, 14, 2)
+		line(5, 10, 5, 2, 45, 1)
+		line(8, 11, 8, 2, -45, 1)
 	elseif name == "x" or name == "close" or name == "error" then
-		line(4, 4, 13, 2, 45, 1)
-		line(4, 14, 13, 2, -45, 1)
+		ring(3, 3, 14, 2)
+		line(6, 6, 9, 2, 45, 1)
+		line(6, 12, 9, 2, -45, 1)
 	elseif name == "warning" or name == "alert" then
-		line(10, 2, 2, 11, 0, 1)
-		dot(9, 15, 4)
-		line(5, 17, 12, 2, 0, 1)
-		line(5, 17, 7, 2, -63, 1)
-		line(10, 5, 7, 2, 63, 1)
+		line(10, 2, 8, 15, -28, 1)
+		line(10, 2, 8, 15, 28, 1)
+		line(5, 17, 11, 2, 0, 1)
+		line(9, 8, 2, 5, 0, 1)
+		dot(8, 14, 4)
 	elseif name == "code" or name == "script" or name == "terminal" then
-		line(3, 10, 6, 2, -35, 1)
-		line(3, 10, 6, 2, 35, 1)
-		line(12, 8, 6, 2, 35, 1)
-		line(12, 12, 6, 2, -35, 1)
-		line(9, 16, 5, 2, -70, 1)
+		rect(3, 4, 14, 12, 3)
+		line(5, 8, 4, 2, -35, 1)
+		line(5, 10, 4, 2, 35, 1)
+		line(11, 8, 4, 2, 35, 1)
+		line(11, 10, 4, 2, -35, 1)
+		line(7, 15, 8, 2, 0, 1)
 	elseif name == "bell" or name == "notification" then
-		rect(5, 7, 10, 9, 4)
-		line(4, 15, 12, 2, 0, 1)
-		dot(8, 17, 4)
+		rect(6, 7, 8, 8, 4)
+		line(5, 14, 10, 2, 0, 1)
+		dot(8, 16, 4)
 		line(9, 3, 2, 4, 0, 1)
+		line(6, 5, 8, 2, 18, 1)
 	elseif name == "toolbox" or name == "tools" then
 		rect(3, 7, 14, 10, 3)
 		line(7, 5, 6, 2, 0, 1)
 		line(7, 5, 2, 4, 0, 1)
 		line(12, 5, 2, 4, 0, 1)
 		line(3, 10, 14, 2, 0, 1)
+		dot(9, 12, 3)
 	elseif name == "test" or name == "flask" then
 		line(7, 3, 6, 2, 0, 1)
 		line(9, 5, 2, 6, 0, 1)
-		rect(5, 11, 10, 6, 3)
-	elseif name == "esp" or name == "eye" or name == "visuals" then
-		line(2, 9, 16, 2, 0, 1)
-		line(4, 5, 12, 2, 24, 1)
-		line(4, 13, 12, 2, -24, 1)
-		dot(8, 8, 4)
-	elseif name == "home" or name == "main" then
-		line(4, 9, 12, 2, 0, 1)
-		line(5, 8, 8, 2, -40, 1)
-		line(8, 8, 8, 2, 40, 1)
-		line(5, 11, 2, 6, 0, 1)
-		line(13, 11, 2, 6, 0, 1)
+		line(7, 10, 6, 7, -20, 2)
+		line(7, 10, 6, 7, 20, 2)
 		line(5, 16, 10, 2, 0, 1)
+		dot(7, 13, 2)
+		dot(11, 14, 2)
+	elseif name == "esp" or name == "eye" or name == "visuals" then
+		line(3, 10, 7, 2, -28, 1)
+		line(10, 8, 7, 2, 28, 1)
+		line(3, 10, 7, 2, 28, 1)
+		line(10, 12, 7, 2, -28, 1)
+		ring(7, 7, 6, 2)
+	elseif name == "home" or name == "main" then
+		line(4, 9, 7, 2, -38, 1)
+		line(9, 4, 7, 2, 38, 1)
+		rect(5, 10, 10, 7, 2)
+		rect(8, 13, 4, 4, 1)
 	elseif name == "settings" or name == "gear" or name == "config" then
-		dot(8, 8, 4)
-		line(9, 1, 2, 5, 0, 1)
-		line(9, 14, 2, 5, 0, 1)
-		line(1, 9, 5, 2, 0, 1)
-		line(14, 9, 5, 2, 0, 1)
+		ring(6, 6, 8, 2)
+		line(9, 1, 2, 4, 0, 1)
+		line(9, 15, 2, 4, 0, 1)
+		line(1, 9, 4, 2, 0, 1)
+		line(15, 9, 4, 2, 0, 1)
 		line(4, 4, 4, 2, 45, 1)
 		line(12, 4, 4, 2, -45, 1)
 		line(4, 14, 4, 2, -45, 1)
 		line(12, 14, 4, 2, 45, 1)
 	elseif name == "players" or name == "user" or name == "users" then
-		dot(4, 4, 6)
-		line(2, 12, 10, 5, 0, 3)
-		dot(12, 6, 4)
-		line(11, 13, 7, 4, 0, 2)
+		ring(4, 3, 6, 2)
+		rect(2, 12, 10, 5, 4)
+		ring(12, 5, 4, 1)
+		rect(11, 13, 7, 4, 3)
 	elseif name == "target" or name == "aim" then
-		line(9, 0, 2, 5, 0, 1)
-		line(9, 15, 2, 5, 0, 1)
-		line(0, 9, 5, 2, 0, 1)
-		line(15, 9, 5, 2, 0, 1)
-		dot(7, 7, 6)
+		ring(4, 4, 12, 2)
+		dot(8, 8, 4)
+		line(9, 0, 2, 4, 0, 1)
+		line(9, 16, 2, 4, 0, 1)
+		line(0, 9, 4, 2, 0, 1)
+		line(16, 9, 4, 2, 0, 1)
 	elseif name == "shield" or name == "security" then
 		line(5, 3, 10, 2, 0, 1)
-		line(5, 3, 2, 9, 0, 1)
-		line(13, 3, 2, 9, 0, 1)
-		line(7, 13, 6, 2, -20, 1)
-		line(7, 13, 6, 2, 20, 1)
+		line(5, 3, 2, 8, 0, 1)
+		line(13, 3, 2, 8, 0, 1)
+		line(6, 11, 4, 6, -32, 1)
+		line(10, 15, 4, 2, -20, 1)
+		line(12, 11, 4, 6, 32, 1)
 	elseif name == "bolt" or name == "power" then
-		line(10, 1, 3, 10, 28, 1)
+		line(10, 1, 3, 9, 25, 1)
 		line(6, 9, 8, 3, 0, 1)
-		line(7, 9, 3, 10, 28, 1)
+		line(7, 9, 3, 10, 25, 1)
 	elseif name == "folder" or name == "files" then
-		line(2, 5, 7, 2, 0, 1)
-		line(2, 7, 16, 2, 0, 1)
-		line(2, 9, 2, 8, 0, 1)
-		line(16, 9, 2, 8, 0, 1)
-		line(2, 16, 16, 2, 0, 1)
+		rect(2, 6, 16, 11, 3)
+		rect(3, 4, 7, 4, 2)
+		line(3, 8, 14, 2, 0, 1)
 	elseif name == "book" or name == "docs" then
-		line(4, 3, 2, 14, 0, 1)
-		line(6, 3, 10, 2, 0, 1)
-		line(6, 16, 10, 2, 0, 1)
-		line(15, 3, 2, 15, 0, 1)
+		rect(4, 3, 12, 15, 2)
+		line(6, 3, 2, 15, 0, 1)
 		line(8, 7, 6, 1, 0, 1)
 		line(8, 10, 6, 1, 0, 1)
+		line(8, 13, 4, 1, 0, 1)
+	elseif name == "clipboard" or name == "tasks" then
+		rect(5, 4, 10, 14, 2)
+		rect(7, 2, 6, 4, 2)
+		line(7, 8, 6, 1, 0, 1)
+		line(7, 11, 6, 1, 0, 1)
+		line(7, 14, 4, 1, 0, 1)
+	elseif name == "search" then
+		ring(4, 4, 9, 2)
+		line(12, 12, 6, 2, 45, 1)
+	elseif name == "color" or name == "paint" then
+		ring(3, 3, 14, 2)
+		dot(6, 6, 3)
+		dot(11, 6, 3)
+		dot(8, 11, 3)
+		line(12, 14, 4, 2, -35, 1)
+	elseif name == "sliders" or name == "controls" then
+		line(3, 5, 14, 2, 0, 1)
+		dot(6, 3, 5)
+		line(3, 10, 14, 2, 0, 1)
+		dot(12, 8, 5)
+		line(3, 15, 14, 2, 0, 1)
+		dot(8, 13, 5)
+	elseif name == "server" or name == "database" then
+		rect(4, 3, 12, 5, 3)
+		rect(4, 8, 12, 5, 3)
+		rect(4, 13, 12, 5, 3)
+		dot(6, 5, 2)
+		dot(6, 10, 2)
+		dot(6, 15, 2)
+	elseif name == "file" or name == "document" then
+		rect(5, 3, 11, 15, 2)
+		line(12, 3, 4, 4, 45, 1)
+		line(7, 9, 6, 1, 0, 1)
+		line(7, 12, 7, 1, 0, 1)
+		line(7, 15, 5, 1, 0, 1)
+	elseif name == "play" or name == "run" then
+		line(6, 4, 2, 12, 0, 1)
+		line(7, 4, 9, 7, 35, 1)
+		line(7, 16, 9, 7, -35, 1)
+	elseif name == "refresh" or name == "reload" then
+		ring(4, 4, 12, 2)
+		chevron(12, 3, "right")
+		chevron(1, 10, "left")
+	elseif name == "copy" then
+		rect(6, 5, 10, 11, 2)
+		rect(3, 8, 10, 10, 2)
+	elseif name == "trash" or name == "delete" then
+		line(5, 5, 10, 2, 0, 1)
+		line(7, 3, 6, 2, 0, 1)
+		rect(6, 7, 8, 11, 2)
+		line(8, 9, 1, 7, 0, 1)
+		line(11, 9, 1, 7, 0, 1)
+	elseif name == "bug" then
+		rect(6, 6, 8, 10, 4)
+		line(7, 4, 6, 2, 0, 1)
+		line(4, 8, 4, 1, -25, 1)
+		line(12, 8, 4, 1, 25, 1)
+		line(4, 13, 4, 1, 25, 1)
+		line(12, 13, 4, 1, -25, 1)
+	elseif name == "rocket" then
+		line(10, 2, 5, 10, 25, 2)
+		line(6, 9, 6, 7, -25, 2)
+		dot(10, 7, 3)
+		line(5, 15, 4, 2, -35, 1)
+	elseif name == "pulse" or name == "activity" then
+		line(2, 11, 4, 2, 0, 1)
+		line(5, 11, 4, 2, -62, 1)
+		line(8, 4, 5, 12, 20, 1)
+		line(12, 12, 3, 2, -45, 1)
+		line(14, 10, 4, 2, 0, 1)
+	elseif name == "lock" or name == "secure" then
+		rect(5, 8, 10, 9, 3)
+		line(7, 8, 2, 5, 0, 1)
+		line(11, 8, 2, 5, 0, 1)
+		line(7, 5, 6, 2, 0, 1)
+		dot(9, 12, 2)
+	elseif name == "unlock" then
+		rect(5, 8, 10, 9, 3)
+		line(7, 8, 2, 5, 0, 1)
+		line(11, 5, 2, 8, 0, 1)
+		line(11, 5, 5, 2, 0, 1)
+		dot(9, 12, 2)
+	elseif name == "download" then
+		line(9, 3, 2, 9, 0, 1)
+		chevron(5, 9, "down")
+		line(4, 16, 12, 2, 0, 1)
+	elseif name == "upload" then
+		line(9, 8, 2, 8, 0, 1)
+		chevron(5, 3, "up")
+		line(4, 16, 12, 2, 0, 1)
+	elseif name == "wifi" or name == "network" then
+		line(3, 8, 14, 2, 25, 1)
+		line(3, 8, 14, 2, -25, 1)
+		line(6, 12, 8, 2, 25, 1)
+		line(6, 12, 8, 2, -25, 1)
+		dot(8, 16, 4)
+	elseif name == "list" or name == "menu-list" then
+		dot(3, 5, 3)
+		dot(3, 10, 3)
+		dot(3, 15, 3)
+		line(8, 6, 9, 2, 0, 1)
+		line(8, 11, 9, 2, 0, 1)
+		line(8, 16, 9, 2, 0, 1)
+	elseif name == "pause" then
+		rect(6, 4, 3, 12, 1)
+		rect(12, 4, 3, 12, 1)
 	else
+		local initial = tostring(iconName or name or "A"):match("%w") or "A"
 		local label = new("TextLabel", {
 			BackgroundTransparency = 1,
 			Size = UDim2.fromScale(1, 1),
@@ -648,7 +852,7 @@ local function createVectorIcon(parent, iconName)
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			TextYAlignment = Enum.TextYAlignment.Center,
-			Text = tostring(iconName or "?"):sub(1, 1):upper(),
+			Text = tostring(initial):sub(1, 1):upper(),
 			Parent = parent
 		})
 		shapes[#shapes + 1] = label
@@ -694,6 +898,8 @@ function Window:_styleTabButton(tab)
 		for _, shape in ipairs(tab.ButtonIconShapes) do
 			if shape:IsA("TextLabel") then
 				shape.TextColor3 = iconColor
+			elseif shape:GetAttribute("AnchorlineIconCutout") then
+				shape.BackgroundColor3 = tab.ButtonIconBox and tab.ButtonIconBox.BackgroundColor3 or getThemeValue(self, "Surface")
 			else
 				shape.BackgroundColor3 = iconColor
 			end
@@ -1580,8 +1786,8 @@ function Window:CreateTab(name, icon, description)
 	local iconBox = new("Frame", {
 		Name = "IconBox",
 		Position = UDim2.fromOffset(9, 5),
-		Size = UDim2.fromOffset(24, 24),
-		BackgroundTransparency = self.FrostedGlass and 0.42 or 0.58,
+		Size = UDim2.fromOffset(28, 28),
+		BackgroundTransparency = self.FrostedGlass and 0.36 or 0.52,
 		BorderSizePixel = 0,
 		Parent = button
 	}, {corner(8)})
@@ -1589,7 +1795,7 @@ function Window:CreateTab(name, icon, description)
 	local iconImage = new("ImageLabel", {
 		Name = "IconImage",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(2, 2),
+		Position = UDim2.fromOffset(4, 4),
 		Size = UDim2.fromOffset(20, 20),
 		ScaleType = Enum.ScaleType.Fit,
 		Visible = tab.IconAsset ~= nil,
@@ -1607,7 +1813,7 @@ function Window:CreateTab(name, icon, description)
 	local iconHolder = new("Frame", {
 		Name = "VectorIcon",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(2, 2),
+		Position = UDim2.fromOffset(4, 4),
 		Size = UDim2.fromOffset(20, 20),
 		Visible = tab.IconAsset == nil,
 		Parent = iconBox
@@ -1617,8 +1823,8 @@ function Window:CreateTab(name, icon, description)
 	local titleLabel = new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(42, 0),
-		Size = UDim2.new(1, -50, 1, 0),
+		Position = UDim2.fromOffset(46, 0),
+		Size = UDim2.new(1, -54, 1, 0),
 		Font = Enum.Font.GothamMedium,
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
@@ -2021,6 +2227,7 @@ function Tab:CreateSlider(options)
 	local maxValue = tonumber(range[2]) or 100
 	local increment = tonumber(options.Increment) or 1
 	local suffix = tostring(options.Suffix or "")
+	local precision = options.Precision or options.DecimalPlaces or options.Decimals
 	local value = tonumber(options.CurrentValue) or minValue
 	local frame = self.Window:_createElement(self, name, name .. " " .. tostring(options.Description or "slider"), 78)
 	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 38), Parent = frame})
@@ -2078,7 +2285,7 @@ function Tab:CreateSlider(options)
 		else
 			fill.Size = targetSize
 		end
-		valueLabel.Text = tostring(value) .. (suffix ~= "" and " " .. suffix or "")
+		valueLabel.Text = formatSliderNumber(value, increment, precision) .. (suffix ~= "" and " " .. suffix or "")
 	end
 	local function updateFromX(x, loading)
 		local percent = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
@@ -3556,7 +3763,13 @@ function Tab:CreateHero(options)
 		local vector = new("Frame", {BackgroundTransparency = 1, Position = UDim2.fromOffset(14, 14), Size = UDim2.fromOffset(20, 20), Parent = iconBox})
 		local shapes = createVectorIcon(vector, options.Icon or titleText)
 		for _, shape in ipairs(shapes) do
-			if shape:IsA("TextLabel") then shape.TextColor3 = getThemeValue(window, "Accent") else shape.BackgroundColor3 = getThemeValue(window, "Accent") end
+			if shape:IsA("TextLabel") then
+				shape.TextColor3 = getThemeValue(window, "Accent")
+			elseif shape:GetAttribute("AnchorlineIconCutout") then
+				shape.BackgroundColor3 = iconBox.BackgroundColor3
+			else
+				shape.BackgroundColor3 = getThemeValue(window, "Accent")
+			end
 		end
 	end
 	local title = new("TextLabel", {
