@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.7.0"
+Anchorline.Version = "4.0.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.IconStyle = "Lucide"
@@ -5163,6 +5163,10 @@ function Anchorline:CreateWindow(options)
 		end
 	end)
 
+	if options.CommandPalette ~= false and type(self.EnableCommandPaletteKeybind) == "function" then
+		self:EnableCommandPaletteKeybind(options.CommandPaletteKey or Enum.KeyCode.K, options.CommandPaletteRequiresControl ~= false)
+	end
+
 	self:SetTheme(options.Theme or "Workbench")
 	self:_setBackgroundBlur(self.FrostedGlass)
 	Anchorline.Windows[#Anchorline.Windows + 1] = self
@@ -6468,6 +6472,787 @@ end
 Tab.AddElement = Tab.CreateElement
 Tab.Element = Tab.CreateElement
 
+-- Anchorline v4 expansion layer: real new components, command palette, dialogs, richer themes, and smoother motion.
+Anchorline.Themes.Quartz = Anchorline.Themes.Quartz or {
+	Background = Color3.fromRGB(242, 243, 246),
+	Panel = Color3.fromRGB(255, 255, 255),
+	PanelAlt = Color3.fromRGB(248, 249, 251),
+	Surface = Color3.fromRGB(255, 255, 255),
+	SurfaceHover = Color3.fromRGB(237, 240, 245),
+	Input = Color3.fromRGB(255, 255, 255),
+	Stroke = Color3.fromRGB(202, 208, 218),
+	StrokeSoft = Color3.fromRGB(222, 226, 234),
+	Text = Color3.fromRGB(35, 39, 47),
+	TextMuted = Color3.fromRGB(87, 96, 112),
+	TextFaint = Color3.fromRGB(132, 141, 157),
+	Accent = Color3.fromRGB(86, 105, 132),
+	AccentHover = Color3.fromRGB(70, 88, 113),
+	AccentSoft = Color3.fromRGB(226, 232, 241),
+	AccentText = Color3.fromRGB(255, 255, 255),
+	ControlKnob = Color3.fromRGB(255, 255, 255),
+	Success = Color3.fromRGB(74, 137, 97),
+	Warning = Color3.fromRGB(170, 124, 54),
+	Danger = Color3.fromRGB(176, 72, 67),
+	Overlay = Color3.fromRGB(52, 57, 67),
+	GlassHighlight = Color3.fromRGB(255, 255, 255),
+	GlassShade = Color3.fromRGB(224, 228, 235)
+}
+Anchorline.Themes.Dune = Anchorline.Themes.Dune or {
+	Background = Color3.fromRGB(243, 238, 229),
+	Panel = Color3.fromRGB(255, 252, 246),
+	PanelAlt = Color3.fromRGB(248, 243, 234),
+	Surface = Color3.fromRGB(255, 253, 248),
+	SurfaceHover = Color3.fromRGB(238, 230, 218),
+	Input = Color3.fromRGB(255, 253, 248),
+	Stroke = Color3.fromRGB(211, 199, 181),
+	StrokeSoft = Color3.fromRGB(230, 222, 209),
+	Text = Color3.fromRGB(48, 42, 35),
+	TextMuted = Color3.fromRGB(105, 94, 78),
+	TextFaint = Color3.fromRGB(146, 134, 116),
+	Accent = Color3.fromRGB(143, 99, 67),
+	AccentHover = Color3.fromRGB(122, 84, 57),
+	AccentSoft = Color3.fromRGB(241, 229, 216),
+	AccentText = Color3.fromRGB(255, 252, 247),
+	ControlKnob = Color3.fromRGB(255, 252, 247),
+	Success = Color3.fromRGB(81, 134, 92),
+	Warning = Color3.fromRGB(178, 126, 43),
+	Danger = Color3.fromRGB(177, 75, 64),
+	Overlay = Color3.fromRGB(70, 62, 52),
+	GlassHighlight = Color3.fromRGB(255, 255, 255),
+	GlassShade = Color3.fromRGB(225, 214, 199)
+}
+Anchorline.Themes.Mist = Anchorline.Themes.Mist or {
+	Background = Color3.fromRGB(236, 242, 242),
+	Panel = Color3.fromRGB(250, 253, 252),
+	PanelAlt = Color3.fromRGB(243, 249, 248),
+	Surface = Color3.fromRGB(255, 255, 253),
+	SurfaceHover = Color3.fromRGB(227, 238, 236),
+	Input = Color3.fromRGB(255, 255, 253),
+	Stroke = Color3.fromRGB(191, 207, 205),
+	StrokeSoft = Color3.fromRGB(216, 227, 225),
+	Text = Color3.fromRGB(32, 45, 47),
+	TextMuted = Color3.fromRGB(82, 103, 106),
+	TextFaint = Color3.fromRGB(126, 146, 149),
+	Accent = Color3.fromRGB(68, 126, 125),
+	AccentHover = Color3.fromRGB(55, 107, 107),
+	AccentSoft = Color3.fromRGB(218, 235, 234),
+	AccentText = Color3.fromRGB(255, 255, 253),
+	ControlKnob = Color3.fromRGB(255, 255, 253),
+	Success = Color3.fromRGB(68, 138, 102),
+	Warning = Color3.fromRGB(166, 122, 55),
+	Danger = Color3.fromRGB(174, 69, 64),
+	Overlay = Color3.fromRGB(48, 65, 67),
+	GlassHighlight = Color3.fromRGB(255, 255, 255),
+	GlassShade = Color3.fromRGB(219, 229, 229)
+}
+Anchorline.Themes.Rosewood = Anchorline.Themes.Rosewood or {
+	Background = Color3.fromRGB(244, 238, 237),
+	Panel = Color3.fromRGB(255, 252, 250),
+	PanelAlt = Color3.fromRGB(249, 244, 242),
+	Surface = Color3.fromRGB(255, 253, 251),
+	SurfaceHover = Color3.fromRGB(240, 231, 229),
+	Input = Color3.fromRGB(255, 253, 251),
+	Stroke = Color3.fromRGB(214, 200, 198),
+	StrokeSoft = Color3.fromRGB(232, 222, 220),
+	Text = Color3.fromRGB(48, 38, 39),
+	TextMuted = Color3.fromRGB(105, 87, 88),
+	TextFaint = Color3.fromRGB(149, 128, 130),
+	Accent = Color3.fromRGB(143, 83, 86),
+	AccentHover = Color3.fromRGB(122, 69, 73),
+	AccentSoft = Color3.fromRGB(242, 224, 224),
+	AccentText = Color3.fromRGB(255, 252, 250),
+	ControlKnob = Color3.fromRGB(255, 252, 250),
+	Success = Color3.fromRGB(81, 134, 92),
+	Warning = Color3.fromRGB(166, 121, 53),
+	Danger = Color3.fromRGB(177, 72, 68),
+	Overlay = Color3.fromRGB(70, 56, 57),
+	GlassHighlight = Color3.fromRGB(255, 255, 255),
+	GlassShade = Color3.fromRGB(228, 215, 214)
+}
+
+Anchorline.CommonIcons = Anchorline.CommonIcons or {
+	"home", "settings", "search", "sliders-horizontal", "activity", "bar-chart-3", "line-chart", "clipboard-list",
+	"terminal", "code-2", "file-text", "folder-open", "database", "server", "shield-check", "lock", "unlock",
+	"download", "upload", "wifi", "bug", "rocket", "zap", "bell", "check-circle", "alert-triangle", "x-circle",
+	"play", "pause", "trash-2", "copy", "user", "users", "box", "layers", "sparkles", "palette", "layout-dashboard"
+}
+
+function Anchorline:SetMotionScale(scale)
+	scale = tonumber(scale) or 1
+	scale = math.clamp(scale, 0.35, 2)
+	self.MotionScale = scale
+	self.Motion.Micro = 0.14 * scale
+	self.Motion.Fast = 0.24 * scale
+	self.Motion.Base = 0.38 * scale
+	self.Motion.Panel = 0.5 * scale
+	self.Motion.Exit = 0.3 * scale
+	return self
+end
+
+function Anchorline:GetMotionScale()
+	return self.MotionScale or 1
+end
+
+local function anchorlineTrackConnection(window, connection)
+	if window and connection and type(connection.Disconnect) == "function" then
+		window._connections[#window._connections + 1] = connection
+	end
+	return connection
+end
+
+local function anchorlineMakeIcon(window, parent, icon, size, color, backgroundColor)
+	local holder = new("Frame", {
+		Name = "IconHolder",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(size or 24, size or 24),
+		Parent = parent
+	})
+	local made = anchorlineVisualIcon(window, holder, icon, size or 24, color or getThemeValue(window, "Accent"), backgroundColor or getThemeValue(window, "Surface"))
+	if made and made.Root then
+		made.Root.AnchorPoint = Vector2.new(0.5, 0.5)
+		made.Root.Position = UDim2.fromScale(0.5, 0.5)
+	end
+	return holder
+end
+
+function Window:AddCommand(options)
+	options = options or {}
+	self.Commands = self.Commands or {}
+	local command = {
+		Name = tostring(options.Name or options.Title or options.Text or "Command"),
+		Description = tostring(options.Description or options.Content or options.Subtitle or ""),
+		Icon = options.Icon or "terminal",
+		Shortcut = options.Shortcut or options.Key or options.Keybind,
+		Callback = options.Callback or options.Run or options.Action,
+		Type = options.Type or options.Kind or "Info",
+		Order = tonumber(options.Order) or (#self.Commands + 1)
+	}
+	self.Commands[#self.Commands + 1] = command
+	return command
+end
+
+function Window:ClearCommands()
+	self.Commands = {}
+	return self
+end
+
+function Window:_collectCommandPaletteItems()
+	local items = {}
+	for _, command in ipairs(self.Commands or {}) do
+		items[#items + 1] = command
+	end
+	for _, tab in ipairs(self.Tabs or {}) do
+		items[#items + 1] = {
+			Name = "Open " .. tostring(tab.Name),
+			Description = tostring(tab.Description or "Switch to this tab"),
+			Icon = tab.IconAsset or "layout-dashboard",
+			Type = "Info",
+			Callback = function()
+				self:_selectTab(tab)
+			end
+		}
+	end
+	items[#items + 1] = {Name = "Fit window to content", Description = "Run Smart Resize on the active page", Icon = "maximize-2", Type = "Info", Callback = function() self:FitContent(true) end}
+	items[#items + 1] = {Name = "Toggle sidebar", Description = "Collapse or expand the sidebar", Icon = "panel-left", Type = "Info", Callback = function() self:CollapseSidebar() end}
+	items[#items + 1] = {Name = "Refresh layout", Description = "Recalculate canvas sizes and adaptive layouts", Icon = "refresh-cw", Type = "Info", Callback = function() self:RefreshLayout(true) end}
+	table.sort(items, function(a, b)
+		return tostring(a.Order or a.Name):lower() < tostring(b.Order or b.Name):lower()
+	end)
+	return items
+end
+
+function Window:_renderCommandPalette(query)
+	if not self.CommandPalette or not self.CommandPalette.List then
+		return
+	end
+	local list = self.CommandPalette.List
+	anchorlineClearChildren(list)
+	query = tostring(query or ""):lower()
+	local shown = 0
+	for _, item in ipairs(self:_collectCommandPaletteItems()) do
+		local haystack = (tostring(item.Name or "") .. " " .. tostring(item.Description or "")):lower()
+		if query == "" or haystack:find(query, 1, true) then
+			shown += 1
+			local row = new("TextButton", {
+				Name = "CommandRow",
+				Size = UDim2.new(1, 0, 0, 52),
+				BackgroundTransparency = self.FrostedGlass and 0.12 or 0,
+				AutoButtonColor = false,
+				Text = "",
+				Parent = list
+			}, {corner(14), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+			self:_track(row, {BackgroundColor3 = "Surface"})
+			local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = self.FrostedGlass and 0.16 or 0, Parent = row}, {corner(10)})
+			self:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+			anchorlineMakeIcon(self, iconBox, item.Icon or "terminal", 18, anchorlineKindColor(self, item.Type or "Info"), getThemeValue(self, "AccentSoft"))
+			local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 7), Size = UDim2.new(1, -150, 0, 20), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or "Command"), Parent = row})
+			self:_track(title, {TextColor3 = "Text"})
+			local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -150, 0, 16), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Description or ""), Parent = row})
+			self:_track(desc, {TextColor3 = "TextMuted"})
+			if item.Shortcut then
+				local key = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(82, 24), BackgroundTransparency = self.FrostedGlass and 0.1 or 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = tostring(item.Shortcut), Parent = row}, {corner(8)})
+				self:_track(key, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+			end
+			row.MouseEnter:Connect(function() tween(row, Anchorline.Motion.Micro, {BackgroundTransparency = self.FrostedGlass and 0.04 or 0}, Enum.EasingStyle.Quint) end)
+			row.MouseLeave:Connect(function() tween(row, Anchorline.Motion.Fast, {BackgroundTransparency = self.FrostedGlass and 0.12 or 0}, Enum.EasingStyle.Quint) end)
+			row.MouseButton1Click:Connect(function()
+				self:CloseCommandPalette()
+				safeCall(item.Callback, item, self)
+			end)
+		end
+	end
+	list.CanvasSize = UDim2.fromOffset(0, math.max(0, shown * 60))
+	if self.CommandPalette.Empty then
+		self.CommandPalette.Empty.Visible = shown == 0
+	end
+end
+
+function Window:_ensureCommandPalette()
+	if self.CommandPalette and self.CommandPalette.Root and self.CommandPalette.Root.Parent then
+		return self.CommandPalette
+	end
+	local overlay = new("Frame", {
+		Name = "CommandPaletteOverlay",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = self.Gui,
+		ZIndex = 180
+	})
+	overlay.BackgroundColor3 = getThemeValue(self, "Overlay")
+	local card = new("Frame", {
+		Name = "CommandPalette",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 74),
+		Size = UDim2.fromOffset(560, 420),
+		BackgroundTransparency = self.FrostedGlass and 0.08 or 0,
+		Parent = overlay,
+		ZIndex = 181
+	}, {corner(22), stroke(getThemeValue(self, "Stroke"), 1, 0), padding(16, 16, 16, 16)})
+	self:_track(card, {BackgroundColor3 = "Panel"})
+	local scale = new("UIScale", {Scale = 0.96, Parent = card})
+	local title = new("TextLabel", {Name = "Title", BackgroundTransparency = 1, Size = UDim2.new(1, -40, 0, 24), Font = Enum.Font.GothamBold, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, Text = "Command Palette", Parent = card, ZIndex = 182})
+	self:_track(title, {TextColor3 = "Text"})
+	local close = new("TextButton", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, -2), Size = UDim2.fromOffset(34, 30), BackgroundTransparency = 1, Text = "×", Font = Enum.Font.GothamBold, TextSize = 18, AutoButtonColor = false, Parent = card, ZIndex = 182})
+	self:_track(close, {TextColor3 = "TextMuted"})
+	local search = new("TextBox", {Name = "Search", Position = UDim2.fromOffset(0, 38), Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = self.FrostedGlass and 0.08 or 0, Text = "", PlaceholderText = "Search commands, tabs, and actions", ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card, ZIndex = 182}, {corner(12), stroke(getThemeValue(self, "StrokeSoft"), 1, 0), padding(12, 12, 0, 0)})
+	self:_track(search, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
+	local list = new("ScrollingFrame", {Name = "Results", Position = UDim2.fromOffset(0, 90), Size = UDim2.new(1, 0, 1, -90), BackgroundTransparency = 1, BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), ScrollBarThickness = 4, ScrollBarImageTransparency = 0.25, Parent = card, ZIndex = 182}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	self:_track(list, {ScrollBarImageColor3 = "Accent"})
+	local empty = new("TextLabel", {Name = "Empty", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.62), Size = UDim2.new(1, -40, 0, 40), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, Text = "No matching commands", Visible = false, Parent = card, ZIndex = 183})
+	self:_track(empty, {TextColor3 = "TextMuted"})
+	close.MouseButton1Click:Connect(function() self:CloseCommandPalette() end)
+	search:GetPropertyChangedSignal("Text"):Connect(function() self:_renderCommandPalette(search.Text) end)
+	overlay.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			self:CloseCommandPalette()
+		end
+	end)
+	self.CommandPalette = {Root = overlay, Card = card, Scale = scale, Search = search, List = list, Empty = empty}
+	return self.CommandPalette
+end
+
+function Window:OpenCommandPalette()
+	local palette = self:_ensureCommandPalette()
+	palette.Root.Visible = true
+	palette.Root.BackgroundTransparency = 1
+	palette.Card.Position = UDim2.new(0.5, 0, 0, 58)
+	palette.Scale.Scale = 0.96
+	palette.Search.Text = ""
+	self:_renderCommandPalette("")
+	tween(palette.Root, Anchorline.Motion.Fast, {BackgroundTransparency = 0.48}, Enum.EasingStyle.Quint)
+	tween(palette.Card, Anchorline.Motion.Panel, {Position = UDim2.new(0.5, 0, 0, 74)}, Enum.EasingStyle.Quint)
+	tween(palette.Scale, Anchorline.Motion.Panel, {Scale = 1}, Enum.EasingStyle.Back)
+	task.defer(function()
+		if palette.Search and palette.Search.Parent then
+			palette.Search:CaptureFocus()
+		end
+	end)
+	return self
+end
+
+function Window:CloseCommandPalette()
+	local palette = self.CommandPalette
+	if not palette or not palette.Root or not palette.Root.Parent then
+		return self
+	end
+	palette.Search:ReleaseFocus()
+	tween(palette.Root, Anchorline.Motion.Exit, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint)
+	tween(palette.Card, Anchorline.Motion.Exit, {Position = UDim2.new(0.5, 0, 0, 58)}, Enum.EasingStyle.Quint)
+	tween(palette.Scale, Anchorline.Motion.Exit, {Scale = 0.96}, Enum.EasingStyle.Quint)
+	task.delay(Anchorline.Motion.Exit + 0.03, function()
+		if palette.Root and palette.Root.Parent then
+			palette.Root.Visible = false
+		end
+	end)
+	return self
+end
+
+function Window:ToggleCommandPalette()
+	local palette = self.CommandPalette
+	if palette and palette.Root and palette.Root.Visible then
+		return self:CloseCommandPalette()
+	end
+	return self:OpenCommandPalette()
+end
+
+function Window:EnableCommandPaletteKeybind(key, requireControl)
+	key = normalizeKey(key or Enum.KeyCode.K)
+	requireControl = requireControl ~= false
+	if self._commandPaletteConnection then
+		self._commandPaletteConnection:Disconnect()
+		self._commandPaletteConnection = nil
+	end
+	self._commandPaletteConnection = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or isTyping() then
+			return
+		end
+		local controlOk = true
+		if requireControl then
+			controlOk = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+		end
+		if controlOk and input.KeyCode == key then
+			self:ToggleCommandPalette()
+		end
+	end)
+	anchorlineTrackConnection(self, self._commandPaletteConnection)
+	return self
+end
+
+function Window:Dialog(options)
+	options = options or {}
+	local overlay = new("Frame", {Name = "DialogOverlay", Size = UDim2.fromScale(1, 1), BackgroundColor3 = getThemeValue(self, "Overlay"), BackgroundTransparency = 1, Parent = self.Gui, ZIndex = 190})
+	local cardWidth = tonumber(options.Width) or 420
+	local content = tostring(options.Content or options.Description or options.Text or "")
+	local contentHeight = measureWrappedText(content, 13, Enum.Font.Gotham, cardWidth - 52)
+	local cardHeight = math.clamp(138 + contentHeight, 168, 420)
+	local card = new("Frame", {Name = "Dialog", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.48), Size = UDim2.fromOffset(cardWidth, cardHeight), BackgroundTransparency = self.FrostedGlass and 0.08 or 0, Parent = overlay, ZIndex = 191}, {corner(22), stroke(getThemeValue(self, "Stroke"), 1, 0), padding(20, 20, 18, 18)})
+	self:_track(card, {BackgroundColor3 = "Panel"})
+	local scale = new("UIScale", {Scale = 0.96, Parent = card})
+	local title = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, -36, 0, 26), Font = Enum.Font.GothamBold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Title or "Dialog"), Parent = card, ZIndex = 192})
+	self:_track(title, {TextColor3 = "Text"})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(0, 38), Size = UDim2.new(1, 0, 0, contentHeight + 8), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = content, Parent = card, ZIndex = 192})
+	self:_track(body, {TextColor3 = "TextMuted"})
+	local buttonRow = new("Frame", {AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, 0), Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, Parent = card, ZIndex = 192}, {listLayout(Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Right)})
+	local closed = false
+	local function close(result)
+		if closed then return end
+		closed = true
+		safeCall(options.Callback, result)
+		tween(overlay, Anchorline.Motion.Exit, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint)
+		tween(scale, Anchorline.Motion.Exit, {Scale = 0.96}, Enum.EasingStyle.Quint)
+		tween(card, Anchorline.Motion.Exit, {Position = UDim2.fromScale(0.5, 0.46)}, Enum.EasingStyle.Quint)
+		task.delay(Anchorline.Motion.Exit + 0.03, function()
+			if overlay and overlay.Parent then overlay:Destroy() end
+		end)
+	end
+	local function makeDialogButton(text, primary, result)
+		local button = new("TextButton", {Size = UDim2.fromOffset(primary and 112 or 96, 34), BackgroundTransparency = self.FrostedGlass and 0.06 or 0, AutoButtonColor = false, Text = tostring(text), Font = Enum.Font.GothamBold, TextSize = 12, Parent = buttonRow, ZIndex = 193}, {corner(10), stroke(getThemeValue(self, primary and "Accent" or "StrokeSoft"), 1, 0)})
+		self:_track(button, {BackgroundColor3 = primary and "Accent" or "Surface", TextColor3 = primary and "AccentText" or "Text"})
+		button.MouseButton1Click:Connect(function() close(result) end)
+		return button
+	end
+	if options.CancelText ~= false then
+		makeDialogButton(options.CancelText or "Cancel", false, false)
+	end
+	makeDialogButton(options.ConfirmText or options.ButtonText or "Continue", true, true)
+	tween(overlay, Anchorline.Motion.Fast, {BackgroundTransparency = 0.48}, Enum.EasingStyle.Quint)
+	tween(card, Anchorline.Motion.Panel, {Position = UDim2.fromScale(0.5, 0.5)}, Enum.EasingStyle.Quint)
+	tween(scale, Anchorline.Motion.Panel, {Scale = 1}, Enum.EasingStyle.Back)
+	return {Root = overlay, Close = close}
+end
+
+Window.CreateDialog = Window.Dialog
+
+function Window:Alert(title, content, callback)
+	return self:Dialog({Title = title or "Alert", Content = content or "", ConfirmText = "OK", CancelText = false, Callback = callback})
+end
+
+function Window:Confirm(title, content, callback)
+	return self:Dialog({Title = title or "Confirm", Content = content or "", ConfirmText = "Confirm", CancelText = "Cancel", Callback = callback})
+end
+
+local function anchorlineFieldName(field, index)
+	return tostring(field.Flag or field.Key or field.Name or field.Title or ("Field" .. tostring(index)))
+end
+
+function Tab:CreateModernCard(options)
+	options = options or {}
+	local window = self.Window
+	local title = tostring(options.Name or options.Title or "Modern Card")
+	local description = tostring(options.Description or options.Content or "")
+	local bodyHeight = measureWrappedText(description, 13, Enum.Font.Gotham, 420)
+	local height = math.max(96, 72 + bodyHeight + (options.Action and 42 or 0))
+	local frame = window:_createElement(self, title, title .. " modern card", height)
+	frame.BackgroundTransparency = window.FrostedGlass and 0.1 or 0
+	frame:SetAttribute("AnchorlineMinWidth", 430)
+	local accent = new("Frame", {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(0, 4, 1, 0), BorderSizePixel = 0, BackgroundColor3 = anchorlineKindColor(window, options.Type or "Info"), Parent = frame}, {corner(4)})
+	local iconBox = new("Frame", {Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(38, 38), BackgroundTransparency = window.FrostedGlass and 0.14 or 0, Parent = frame}, {corner(14)})
+	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+	anchorlineMakeIcon(window, iconBox, options.Icon or "sparkles", 22, anchorlineKindColor(window, options.Type or "Info"), getThemeValue(window, "AccentSoft"))
+	local titleLabel = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(68, 16), Size = UDim2.new(1, -88, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = title, Parent = frame})
+	window:_track(titleLabel, {TextColor3 = "Text"})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(68, 42), Size = UDim2.new(1, -88, 0, bodyHeight + 4), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
+	window:_track(body, {TextColor3 = "TextMuted"})
+	local controller = {Type = "ModernCard", Frame = frame, Title = titleLabel, Description = body, Accent = accent}
+	if options.Action then
+		local button = anchorlineVisualButton(window, frame, options.ActionText or "Open", 104, true, function()
+			safeCall(options.Action, controller)
+		end)
+		button.AnchorPoint = Vector2.new(1, 1)
+		button.Position = UDim2.new(1, -16, 1, -14)
+		controller.Button = button
+	end
+	function controller:SetTitle(text)
+		titleLabel.Text = tostring(text or "")
+	end
+	function controller:SetDescription(text)
+		body.Text = tostring(text or "")
+	end
+	return controller
+end
+
+function Tab:CreateFeatureList(options)
+	options = options or {}
+	local window = self.Window
+	local title = tostring(options.Name or options.Title or "Feature List")
+	local items = options.Items or options.Features or {}
+	local frame = window:_createElement(self, title, title .. " feature list", 60 + math.max(#items, 1) * 48)
+	frame:SetAttribute("AnchorlineMinWidth", 440)
+	self:_headerRow(frame, title, options.Description)
+	local holder = new("Frame", {Name = "Features", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, math.max(#items, 1) * 48), Parent = frame}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	local controller = {Type = "FeatureList", Frame = frame}
+	local function build(item, index)
+		item = type(item) == "table" and item or {Name = tostring(item)}
+		local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = window.FrostedGlass and 0.16 or 0, Parent = holder}, {corner(12), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+		window:_track(row, {BackgroundColor3 = "Surface"})
+		local iconBox = new("Frame", {Position = UDim2.fromOffset(10, 8), Size = UDim2.fromOffset(24, 24), BackgroundTransparency = 1, Parent = row})
+		anchorlineMakeIcon(window, iconBox, item.Icon or "check-circle", 20, anchorlineKindColor(window, item.Type or item.Status or "Success"), getThemeValue(window, "Surface"))
+		local label = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(44, 0), Size = UDim2.new(1, -140, 1, 0), Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or item.Title or "Feature"), Parent = row})
+		window:_track(label, {TextColor3 = "Text"})
+		local badge = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(86, 22), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = tostring(item.Badge or item.Status or "Ready"), Parent = row}, {corner(8)})
+		window:_track(badge, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+	end
+	function controller:SetItems(newItems)
+		items = newItems or {}
+		anchorlineClearChildren(holder)
+		for index, item in ipairs(items) do build(item, index) end
+		holder.Size = UDim2.new(1, 0, 0, math.max(#items, 1) * 48)
+		frame.Size = UDim2.new(1, 0, 0, 60 + math.max(#items, 1) * 48)
+		window:RefreshLayout(false)
+	end
+	controller:SetItems(items)
+	return controller
+end
+
+function Tab:CreateShortcutGrid(options)
+	options = options or {}
+	local window = self.Window
+	local title = tostring(options.Name or options.Title or "Shortcuts")
+	local items = options.Items or options.Shortcuts or options.Actions or {}
+	local columns = math.clamp(tonumber(options.Columns) or 2, 1, 4)
+	local cellHeight = tonumber(options.CellHeight) or 72
+	local rows = math.max(1, math.ceil(math.max(#items, 1) / columns))
+	local frame = window:_createElement(self, title, title .. " shortcut grid", 60 + rows * cellHeight + math.max(rows - 1, 0) * 10)
+	frame:SetAttribute("AnchorlineMinWidth", 460)
+	self:_headerRow(frame, title, options.Description)
+	local grid = new("Frame", {Name = "Grid", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, rows * cellHeight + math.max(rows - 1, 0) * 10), Parent = frame})
+	local layout = new("UIGridLayout", {CellPadding = UDim2.fromOffset(10, 10), CellSize = UDim2.new(1 / columns, -math.ceil(10 * (columns - 1) / columns), 0, cellHeight), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid})
+	local controller = {Type = "ShortcutGrid", Frame = frame, Grid = grid}
+	local function build(item, index)
+		item = type(item) == "table" and item or {Name = tostring(item)}
+		local card = new("TextButton", {Name = "Shortcut", LayoutOrder = index, BackgroundTransparency = window.FrostedGlass and 0.14 or 0, AutoButtonColor = false, Text = "", Parent = grid}, {corner(14), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+		window:_track(card, {BackgroundColor3 = "Surface"})
+		local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(30, 30), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Parent = card}, {corner(10)})
+		window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+		anchorlineMakeIcon(window, iconBox, item.Icon or "zap", 19, anchorlineKindColor(window, item.Type or "Info"), getThemeValue(window, "AccentSoft"))
+		local label = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 9), Size = UDim2.new(1, -62, 0, 20), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or item.Title or "Action"), Parent = card})
+		window:_track(label, {TextColor3 = "Text"})
+		local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 31), Size = UDim2.new(1, -62, 0, 28), Font = Enum.Font.Gotham, TextSize = 11, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(item.Description or item.Content or ""), Parent = card})
+		window:_track(desc, {TextColor3 = "TextMuted"})
+		card.MouseEnter:Connect(function() tween(card, Anchorline.Motion.Micro, {BackgroundTransparency = window.FrostedGlass and 0.06 or 0}, Enum.EasingStyle.Quint) end)
+		card.MouseLeave:Connect(function() tween(card, Anchorline.Motion.Fast, {BackgroundTransparency = window.FrostedGlass and 0.14 or 0}, Enum.EasingStyle.Quint) end)
+		card.MouseButton1Click:Connect(function() safeCall(item.Callback or options.Callback, item, index) end)
+	end
+	function controller:SetItems(newItems)
+		items = newItems or {}
+		anchorlineClearChildren(grid)
+		for index, item in ipairs(items) do build(item, index) end
+		rows = math.max(1, math.ceil(math.max(#items, 1) / columns))
+		grid.Size = UDim2.new(1, 0, 0, rows * cellHeight + math.max(rows - 1, 0) * 10)
+		frame.Size = UDim2.new(1, 0, 0, 60 + rows * cellHeight + math.max(rows - 1, 0) * 10)
+		window:RefreshLayout(false)
+	end
+	controller:SetItems(items)
+	return controller
+end
+
+function Tab:CreateActivityFeed(options)
+	options = options or {}
+	local window = self.Window
+	local title = tostring(options.Name or options.Title or "Activity")
+	local events = options.Events or options.Items or {}
+	local rowHeight = tonumber(options.RowHeight) or 54
+	local frame = window:_createElement(self, title, title .. " activity feed", 60 + math.max(#events, 1) * rowHeight)
+	frame:SetAttribute("AnchorlineMinWidth", 430)
+	self:_headerRow(frame, title, options.Description)
+	local holder = new("Frame", {Name = "Events", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, math.max(#events, 1) * rowHeight), Parent = frame}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	local controller = {Type = "ActivityFeed", Frame = frame}
+	local function build(event, index)
+		event = type(event) == "table" and event or {Title = tostring(event)}
+		local row = new("Frame", {Size = UDim2.new(1, 0, 0, rowHeight - 8), BackgroundTransparency = 1, Parent = holder})
+		local dot = new("Frame", {Position = UDim2.fromOffset(12, 7), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = anchorlineKindColor(window, event.Type or event.Status or "Info"), Parent = row}, {corner(6)})
+		local line = new("Frame", {Position = UDim2.fromOffset(17, 25), Size = UDim2.new(0, 2, 1, -25), BorderSizePixel = 0, Parent = row})
+		window:_track(line, {BackgroundColor3 = "StrokeSoft"})
+		local name = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 0), Size = UDim2.new(1, -46, 0, 20), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(event.Title or event.Name or "Event"), Parent = row})
+		window:_track(name, {TextColor3 = "Text"})
+		local detail = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 22), Size = UDim2.new(1, -46, 0, 18), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(event.Description or event.Content or event.Time or ""), Parent = row})
+		window:_track(detail, {TextColor3 = "TextMuted"})
+	end
+	function controller:SetEvents(newEvents)
+		events = newEvents or {}
+		anchorlineClearChildren(holder)
+		for index, event in ipairs(events) do build(event, index) end
+		holder.Size = UDim2.new(1, 0, 0, math.max(#events, 1) * rowHeight)
+		frame.Size = UDim2.new(1, 0, 0, 60 + math.max(#events, 1) * rowHeight)
+		window:RefreshLayout(false)
+	end
+	controller:SetEvents(events)
+	return controller
+end
+
+function Tab:CreateThemeSelector(options)
+	options = options or {}
+	local window = self.Window
+	local names = options.Themes or {}
+	if #names == 0 then
+		for name in pairs(Anchorline.Themes) do
+			names[#names + 1] = name
+		end
+		table.sort(names)
+	end
+	local columns = math.clamp(tonumber(options.Columns) or 3, 2, 4)
+	local rows = math.max(1, math.ceil(#names / columns))
+	local frame = window:_createElement(self, options.Name or options.Title or "Theme Selector", "theme selector", 58 + rows * 58)
+	frame:SetAttribute("AnchorlineMinWidth", 480)
+	self:_headerRow(frame, options.Name or options.Title or "Theme Selector", options.Description or "Switch the active interface theme.")
+	local grid = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, rows * 58), Parent = frame})
+	new("UIGridLayout", {CellPadding = UDim2.fromOffset(10, 10), CellSize = UDim2.new(1 / columns, -math.ceil(10 * (columns - 1) / columns), 0, 48), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid})
+	local controller = {Type = "ThemeSelector", Frame = frame, Buttons = {}}
+	for index, themeName in ipairs(names) do
+		local theme = Anchorline.Themes[themeName] or Anchorline.Themes.Workbench
+		local button = new("TextButton", {LayoutOrder = index, BackgroundColor3 = theme.Surface or getThemeValue(window, "Surface"), BackgroundTransparency = window.FrostedGlass and 0.08 or 0, AutoButtonColor = false, Text = "", Parent = grid}, {corner(14), stroke(theme.StrokeSoft or getThemeValue(window, "StrokeSoft"), 1, 0)})
+		local swatch = new("Frame", {Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(28, 28), BackgroundColor3 = theme.Accent or getThemeValue(window, "Accent"), Parent = button}, {corner(10)})
+		local label = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(48, 0), Size = UDim2.new(1, -56, 1, 0), Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, TextColor3 = theme.Text or getThemeValue(window, "Text"), Text = tostring(themeName), Parent = button})
+		button.MouseButton1Click:Connect(function()
+			window:SetTheme(themeName)
+			window:Notify({Title = "Theme changed", Content = "Using " .. tostring(themeName), Type = "Success", Duration = 2})
+		end)
+		controller.Buttons[themeName] = button
+	end
+	return controller
+end
+
+function Tab:CreateForm(options)
+	options = options or {}
+	local window = self.Window
+	local title = tostring(options.Name or options.Title or "Form")
+	local fields = options.Fields or options.Items or {}
+	local values = {}
+	local rowHeight = 48
+	local frame = window:_createElement(self, title, title .. " form", 74 + math.max(#fields, 1) * rowHeight + 46)
+	frame:SetAttribute("AnchorlineMinWidth", 480)
+	self:_headerRow(frame, title, options.Description)
+	local holder = new("Frame", {Name = "Fields", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, math.max(#fields, 1) * rowHeight), Parent = frame}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	local controller = {Type = "Form", Frame = frame, Values = values, Inputs = {}}
+	local function setValue(key, value)
+		values[key] = value
+		safeCall(options.OnChanged or options.Changed, values, key, value)
+	end
+	for index, field in ipairs(fields) do
+		field = type(field) == "table" and field or {Name = tostring(field)}
+		local key = anchorlineFieldName(field, index)
+		values[key] = field.Default or field.Value or field.CurrentValue or ""
+		local row = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1, Parent = holder})
+		local label = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(0, 0), Size = UDim2.new(0.35, -8, 1, 0), Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(field.Label or field.Name or key), Parent = row})
+		window:_track(label, {TextColor3 = "Text"})
+		local kind = anchorlineNormalizeType(field.Type or field.Kind or "input")
+		if kind == "toggle" or kind == "switch" or kind == "boolean" then
+			local toggle = new("TextButton", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(62, 30), BackgroundTransparency = window.FrostedGlass and 0.08 or 0, Text = "", AutoButtonColor = false, Parent = row}, {corner(15), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+			local knob = new("Frame", {Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = getThemeValue(window, "ControlKnob"), Parent = toggle}, {corner(11)})
+			local function render()
+				local on = values[key] == true
+				toggle.BackgroundColor3 = on and getThemeValue(window, "Accent") or getThemeValue(window, "Input")
+				tween(knob, Anchorline.Motion.Fast, {Position = on and UDim2.fromOffset(36, 4) or UDim2.fromOffset(4, 4)}, Enum.EasingStyle.Quint)
+			end
+			toggle.MouseButton1Click:Connect(function() setValue(key, not values[key]); render() end)
+			render()
+			controller.Inputs[key] = toggle
+		else
+			local box = new("TextBox", {Position = UDim2.new(0.35, 0, 0, 3), Size = UDim2.new(0.65, 0, 1, -6), BackgroundTransparency = window.FrostedGlass and 0.08 or 0, Text = tostring(values[key] or ""), PlaceholderText = tostring(field.Placeholder or ""), ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Parent = row}, {corner(10), stroke(getThemeValue(window, "StrokeSoft"), 1, 0), padding(10, 10, 0, 0)})
+			window:_track(box, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
+			box.FocusLost:Connect(function() setValue(key, box.Text) end)
+			controller.Inputs[key] = box
+		end
+	end
+	local submit = anchorlineVisualButton(window, frame, options.SubmitText or "Submit", 108, true, function()
+		safeCall(options.Callback or options.OnSubmit or options.Submit, values, controller)
+	end)
+	submit.AnchorPoint = Vector2.new(1, 1)
+	submit.Position = UDim2.new(1, -14, 1, -12)
+	function controller:GetValues()
+		local copy = {}
+		for key, value in pairs(values) do copy[key] = value end
+		return copy
+	end
+	function controller:SetValue(key, value)
+		values[key] = value
+		local input = controller.Inputs[key]
+		if input and input:IsA("TextBox") then
+			input.Text = tostring(value or "")
+		end
+		return controller
+	end
+	return controller
+end
+
+function Tab:CreateWizard(options)
+	options = options or {}
+	local window = self.Window
+	local steps = options.Steps or options.Items or {{Title = "Step 1", Content = "Add steps to this wizard."}}
+	local frame = window:_createElement(self, options.Name or options.Title or "Wizard", "wizard", tonumber(options.Height) or 218)
+	frame:SetAttribute("AnchorlineMinWidth", 470)
+	local stepIndex = 1
+	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 16), Size = UDim2.new(1, -36, 0, 24), Font = Enum.Font.GothamBold, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, Text = "", Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(18, 48), Size = UDim2.new(1, -36, 1, -102), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = "", Parent = frame})
+	window:_track(body, {TextColor3 = "TextMuted"})
+	local count = new("TextLabel", {BackgroundTransparency = 1, AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 18, 1, -18), Size = UDim2.fromOffset(120, 28), Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Parent = frame})
+	window:_track(count, {TextColor3 = "TextFaint"})
+	local back = anchorlineVisualButton(window, frame, options.BackText or "Back", 86, false, nil)
+	back.AnchorPoint = Vector2.new(1, 1)
+	back.Position = UDim2.new(1, -116, 1, -16)
+	local nextButton = anchorlineVisualButton(window, frame, options.NextText or "Next", 94, true, nil)
+	nextButton.AnchorPoint = Vector2.new(1, 1)
+	nextButton.Position = UDim2.new(1, -14, 1, -16)
+	local controller = {Type = "Wizard", Frame = frame, Step = 1}
+	local function render()
+		local step = steps[stepIndex] or steps[1]
+		controller.Step = stepIndex
+		title.Text = tostring(step.Title or step.Name or ("Step " .. tostring(stepIndex)))
+		body.Text = tostring(step.Content or step.Description or step.Text or "")
+		count.Text = tostring(stepIndex) .. " / " .. tostring(#steps)
+		back.Visible = stepIndex > 1
+		nextButton.Text = stepIndex >= #steps and (options.FinishText or "Finish") or (options.NextText or "Next")
+	end
+	back.MouseButton1Click:Connect(function() if stepIndex > 1 then stepIndex -= 1; render(); safeCall(options.OnStepChanged, stepIndex, controller) end end)
+	nextButton.MouseButton1Click:Connect(function()
+		if stepIndex >= #steps then
+			safeCall(options.Callback or options.OnFinish, controller)
+		else
+			stepIndex += 1
+			render()
+			safeCall(options.OnStepChanged, stepIndex, controller)
+		end
+	end)
+	function controller:SetStep(index)
+		stepIndex = math.clamp(tonumber(index) or 1, 1, #steps)
+		render()
+		return controller
+	end
+	render()
+	return controller
+end
+
+function Tab:CreateIconGallery(options)
+	options = options or {}
+	local window = self.Window
+	local icons = options.Icons or Anchorline.CommonIcons
+	local columns = math.clamp(tonumber(options.Columns) or 5, 3, 8)
+	local rows = math.max(1, math.ceil(#icons / columns))
+	local frame = window:_createElement(self, options.Name or options.Title or "Icon Gallery", "icon gallery lucide icons", 58 + rows * 58)
+	frame:SetAttribute("AnchorlineMinWidth", 500)
+	self:_headerRow(frame, options.Name or options.Title or "Icon Gallery", options.Description or "Lucide icon names you can use in tabs and controls.")
+	local grid = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, rows * 58), Parent = frame})
+	new("UIGridLayout", {CellPadding = UDim2.fromOffset(10, 10), CellSize = UDim2.new(1 / columns, -math.ceil(10 * (columns - 1) / columns), 0, 48), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid})
+	for index, iconName in ipairs(icons) do
+		local button = new("TextButton", {LayoutOrder = index, BackgroundTransparency = window.FrostedGlass and 0.14 or 0, AutoButtonColor = false, Text = "", Parent = grid}, {corner(14), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+		window:_track(button, {BackgroundColor3 = "Surface"})
+		local iconBox = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 7), Size = UDim2.fromOffset(24, 24), BackgroundTransparency = 1, Parent = button})
+		anchorlineMakeIcon(window, iconBox, iconName, 22, getThemeValue(window, "Accent"), getThemeValue(window, "Surface"))
+		button.MouseButton1Click:Connect(function()
+			if setclipboard then pcall(setclipboard, tostring(iconName)) end
+			safeCall(options.Callback, iconName)
+			window:Notify({Title = "Icon selected", Content = tostring(iconName), Type = "Info", Duration = 2})
+		end)
+	end
+	return {Type = "IconGallery", Frame = frame, Icons = icons}
+end
+
+Tab.CreatePanelCard = Tab.CreateModernCard
+Tab.CreateGlassCard = Tab.CreateModernCard
+Tab.CreateModernPanel = Tab.CreateModernCard
+Tab.CreateFeaturePanel = Tab.CreateFeatureList
+Tab.CreateShortcuts = Tab.CreateShortcutGrid
+Tab.CreateQuickGrid = Tab.CreateShortcutGrid
+Tab.CreateTimelineFeed = Tab.CreateActivityFeed
+
+local anchorlineV4CreateElement = Tab.CreateElement
+function Tab:CreateElement(kindOrOptions, maybeOptions)
+	local kind = nil
+	local options = nil
+	if type(kindOrOptions) == "table" then
+		options = anchorlineCopyTable(kindOrOptions)
+		kind = options.Type or options.ElementType or options.Kind or options.Class or options.Control or options.Component
+	elseif type(kindOrOptions) == "string" and type(maybeOptions) == "table" then
+		kind = kindOrOptions
+		options = anchorlineCopyTable(maybeOptions)
+	elseif type(kindOrOptions) == "string" then
+		kind = kindOrOptions
+		options = {Name = kindOrOptions}
+	else
+		options = {}
+	end
+	local normalized = anchorlineNormalizeType(kind or "")
+	if normalized == "modern-card" or normalized == "moderncard" or normalized == "glass-card" or normalized == "panel-card" then
+		return self:CreateModernCard(options)
+	elseif normalized == "feature-list" or normalized == "features" or normalized == "feature-panel" then
+		return self:CreateFeatureList(options)
+	elseif normalized == "shortcut-grid" or normalized == "shortcuts" or normalized == "quick-grid" then
+		return self:CreateShortcutGrid(options)
+	elseif normalized == "activity-feed" or normalized == "feed" or normalized == "timeline-feed" then
+		return self:CreateActivityFeed(options)
+	elseif normalized == "theme-selector" or normalized == "themes" then
+		return self:CreateThemeSelector(options)
+	elseif normalized == "form" or normalized == "settings-form" then
+		return self:CreateForm(options)
+	elseif normalized == "wizard" or normalized == "steps" or normalized == "stepper-panel" then
+		return self:CreateWizard(options)
+	elseif normalized == "icon-gallery" or normalized == "icons" then
+		return self:CreateIconGallery(options)
+	end
+	return anchorlineV4CreateElement(self, kindOrOptions, maybeOptions)
+end
+Tab.AddElement = Tab.CreateElement
+Tab.Element = Tab.CreateElement
+
+local oldVisualComponents = Anchorline.VisualComponents or {}
+local componentSeen = {}
+Anchorline.VisualComponents = {}
+for _, name in ipairs(oldVisualComponents) do
+	if not componentSeen[name] then
+		componentSeen[name] = true
+		Anchorline.VisualComponents[#Anchorline.VisualComponents + 1] = name
+	end
+end
+for _, name in ipairs({"ModernCard", "FeatureList", "ShortcutGrid", "ActivityFeed", "ThemeSelector", "Form", "Wizard", "IconGallery", "CommandPalette", "Dialog"}) do
+	if not componentSeen[name] then
+		componentSeen[name] = true
+		Anchorline.VisualComponents[#Anchorline.VisualComponents + 1] = name
+	end
+end
+
+
 Anchorline.VisualComponents = {
 	"Banner",
 	"EmptyState",
@@ -6480,7 +7265,17 @@ Anchorline.VisualComponents = {
 	"CodeBlock",
 	"CommandPanel",
 	"SplitPanel",
-	"Dashboard"
+	"Dashboard",
+	"ModernCard",
+	"FeatureList",
+	"ShortcutGrid",
+	"ActivityFeed",
+	"ThemeSelector",
+	"Form",
+	"Wizard",
+	"IconGallery",
+	"CommandPalette",
+	"Dialog"
 }
 
 local anchorlineMetatable = getmetatable(Anchorline) or {}
