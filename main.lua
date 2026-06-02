@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.3.0"
+Anchorline.Version = "2.3.2"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 
@@ -51,7 +51,7 @@ local function new(className, properties, children)
 end
 
 local function tween(object, time, properties, easingStyle, easingDirection)
-	local info = TweenInfo.new(time or 0.24, easingStyle or Enum.EasingStyle.Quint, easingDirection or Enum.EasingDirection.Out)
+	local info = TweenInfo.new(time or 0.28, easingStyle or Enum.EasingStyle.Quint, easingDirection or Enum.EasingDirection.Out)
 	local t = TweenService:Create(object, info, properties)
 	t:Play()
 	return t
@@ -99,9 +99,9 @@ local function normalizeKey(key)
 	end
 	if type(key) == "string" then
 		local cleaned = key:gsub("Enum%.KeyCode%.", "")
-		return Enum.KeyCode[cleaned] or Enum.KeyCode.RightControl
+		return Enum.KeyCode[cleaned] or Enum.KeyCode.RightShift
 	end
-	return Enum.KeyCode.RightControl
+	return Enum.KeyCode.RightShift
 end
 
 local function colorToTable(color)
@@ -441,8 +441,8 @@ end
 
 function Window:_updateContentOffset()
 	local width = self.SidebarCollapsed and 64 or self.SidebarWidth
-	tween(self.Sidebar, 0.2, {Size = UDim2.new(0, width, 1, -58)})
-	tween(self.Content, 0.2, {Position = UDim2.new(0, width, 0, 58), Size = UDim2.new(1, -width, 1, -58)})
+	tween(self.Sidebar, 0.32, {Size = UDim2.new(0, width, 1, -58)}, Enum.EasingStyle.Quint)
+	tween(self.Content, 0.32, {Position = UDim2.new(0, width, 0, 58), Size = UDim2.new(1, -width, 1, -58)}, Enum.EasingStyle.Quint)
 	for _, tab in ipairs(self.Tabs) do
 		tab.ButtonTitle.Visible = not self.SidebarCollapsed
 	end
@@ -469,12 +469,12 @@ function Window:Minimize(value)
 		self.Sidebar.Visible = false
 		self.Content.Visible = false
 		self.ResizeHandle.Visible = false
-		tween(self.Root, 0.22, {Size = UDim2.new(0, math.max(420, self.Root.AbsoluteSize.X), 0, 58)})
+		tween(self.Root, 0.36, {Size = UDim2.new(0, math.max(420, self.Root.AbsoluteSize.X), 0, 58)}, Enum.EasingStyle.Quint)
 	else
 		self.Sidebar.Visible = true
 		self.Content.Visible = true
 		self.ResizeHandle.Visible = true
-		tween(self.Root, 0.22, {Size = self._lastSize or UDim2.fromOffset(self.Width, self.Height)})
+		tween(self.Root, 0.36, {Size = self._lastSize or UDim2.fromOffset(self.Width, self.Height)}, Enum.EasingStyle.Quint)
 	end
 	return self.Minimized
 end
@@ -482,11 +482,26 @@ end
 function Window:Show()
 	self.Gui.Enabled = true
 	self.Hidden = false
+	if self.Root then
+		self.Root.Visible = true
+		self.Root.GroupTransparency = 1
+		tween(self.Root, 0.32, {GroupTransparency = 0}, Enum.EasingStyle.Quint)
+	end
 end
 
 function Window:Hide()
-	self.Gui.Enabled = false
 	self.Hidden = true
+	if self.Root then
+		tween(self.Root, 0.26, {GroupTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		task.delay(0.28, function()
+			if self.Hidden and self.Gui and self.Root then
+				self.Root.Visible = false
+				self.Gui.Enabled = false
+			end
+		end)
+	else
+		self.Gui.Enabled = false
+	end
 end
 
 function Window:Toggle()
@@ -713,8 +728,8 @@ function Window:Notify(options)
 
 	local card = new("Frame", {
 		Name = "NotificationCard",
-		Position = UDim2.fromOffset(36, 0),
-		Size = UDim2.new(1, 0, 0, 0),
+		Position = UDim2.fromOffset(44, 0),
+		Size = UDim2.new(1, -44, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
@@ -785,23 +800,23 @@ function Window:Notify(options)
 
 	task.defer(function()
 		if not card or not card.Parent then return end
-		tween(card, 0.34, {Position = UDim2.fromOffset(0, 0), BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
-		tween(cardStroke, 0.34, {Transparency = 0}, Enum.EasingStyle.Quint)
-		tween(badge, 0.3, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
-		tween(title, 0.28, {TextTransparency = 0}, Enum.EasingStyle.Quint)
-		tween(content, 0.32, {TextTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(card, 0.42, {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(cardStroke, 0.36, {Transparency = 0}, Enum.EasingStyle.Quint)
+		tween(badge, 0.34, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(title, 0.34, {TextTransparency = 0}, Enum.EasingStyle.Quint)
+		tween(content, 0.38, {TextTransparency = 0}, Enum.EasingStyle.Quint)
 	end)
 
 	task.delay(duration, function()
 		if not card or not card.Parent then
 			return
 		end
-		tween(card, 0.3, {Position = UDim2.fromOffset(40, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		tween(card, 0.36, {Position = UDim2.fromOffset(44, 0), Size = UDim2.new(1, -44, 0, 0), BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(cardStroke, 0.25, {Transparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(badge, 0.22, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(title, 0.22, {TextTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 		tween(content, 0.22, {TextTransparency = 1}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-		task.wait(0.32)
+		task.wait(0.38)
 		if wrapper then
 			wrapper:Destroy()
 		end
@@ -1007,6 +1022,7 @@ function Window:CreateTab(name, icon, description)
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		ClipsDescendants = true,
 		Visible = false,
 		Parent = self.Pages
 	}, {
@@ -1046,7 +1062,7 @@ end
 function Window:_createElement(tab, titleText, searchText, height)
 	local frame = new("Frame", {
 		Name = tostring(titleText or "Element"),
-		Size = UDim2.new(1, 0, 0, height or 54),
+		Size = UDim2.new(1, -32, 0, height or 54),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 0,
 		ClipsDescendants = false,
@@ -1105,7 +1121,7 @@ end
 function Tab:CreateSection(name)
 	local frame = new("Frame", {
 		Name = tostring(name or "Section"),
-		Size = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.new(1, -32, 0, 28),
 		BackgroundTransparency = 1,
 		Parent = self.Page
 	})
@@ -1128,7 +1144,7 @@ end
 function Tab:CreateDivider()
 	local frame = new("Frame", {
 		Name = "Divider",
-		Size = UDim2.new(1, 0, 0, 10),
+		Size = UDim2.new(1, -32, 0, 10),
 		BackgroundTransparency = 1,
 		Parent = self.Page
 	})
@@ -1249,22 +1265,34 @@ function Tab:CreateToggle(options)
 		AutoButtonColor = false,
 		Parent = row
 	}, {corner(13)})
+	local buttonStroke = stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)
+	buttonStroke.Parent = button
+	self.Window:_track(buttonStroke, {Color = "StrokeSoft"})
 	local knob = new("Frame", {
 		Size = UDim2.fromOffset(20, 20),
-		Position = UDim2.fromOffset(3, 3),
+		Position = value and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3),
 		BorderSizePixel = 0,
 		Parent = button
 	}, {corner(10)})
 	self.Window:_track(knob, {BackgroundColor3 = "ControlKnob"})
 
 	local controller = {Type = "Toggle", Flag = options.Flag}
-	local function render()
-		button.BackgroundColor3 = value and getThemeValue(self.Window, "Accent") or getThemeValue(self.Window, "Surface")
-		knob.Position = value and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)
+	local function render(animated)
+		local activeColor = getThemeValue(self.Window, "Success")
+		local inactiveColor = getThemeValue(self.Window, "Surface")
+		local targetColor = value and activeColor or inactiveColor
+		local targetPosition = value and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)
+		if animated then
+			tween(button, 0.26, {BackgroundColor3 = targetColor}, Enum.EasingStyle.Quint)
+			tween(knob, 0.26, {Position = targetPosition}, Enum.EasingStyle.Quint)
+		else
+			button.BackgroundColor3 = targetColor
+			knob.Position = targetPosition
+		end
 	end
 	function controller:Set(newValue, loading)
 		value = newValue and true or false
-		render()
+		render(not loading)
 		if not loading then
 			safeCall(options.Callback, value)
 			self.Window:_autoSave()
@@ -1273,10 +1301,27 @@ function Tab:CreateToggle(options)
 	function controller:Get()
 		return value
 	end
+	function controller:Toggle()
+		controller:Set(not value)
+		return value
+	end
 	button.MouseButton1Click:Connect(function()
 		controller:Set(not value)
 	end)
-	render()
+	local keyOption = options.Keybind or options.CurrentKeybind or options.ToggleKey
+	if keyOption then
+		local toggleKey = normalizeKey(keyOption)
+		local connection = UserInputService.InputBegan:Connect(function(input, processed)
+			if processed or isTyping() then
+				return
+			end
+			if input.KeyCode == toggleKey then
+				controller:Set(not value)
+			end
+		end)
+		self.Window._connections[#self.Window._connections + 1] = connection
+	end
+	render(false)
 	self.Window:_registerFlag(options.Flag, controller)
 	return controller
 end
@@ -1916,10 +1961,10 @@ function Anchorline:CreateWindow(options)
 		}, {corner(10), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 		self:_track(b, {BackgroundColor3 = "Surface", TextColor3 = "TextMuted"})
 		b.MouseEnter:Connect(function()
-			b.BackgroundColor3 = getThemeValue(self, "SurfaceHover")
+			tween(b, 0.16, {BackgroundColor3 = getThemeValue(self, "SurfaceHover")})
 		end)
 		b.MouseLeave:Connect(function()
-			b.BackgroundColor3 = getThemeValue(self, "Surface")
+			tween(b, 0.18, {BackgroundColor3 = getThemeValue(self, "Surface")})
 		end)
 		return b
 	end
@@ -2027,7 +2072,7 @@ function Anchorline:CreateWindow(options)
 	local pages = new("Frame", {
 		Name = "Pages",
 		Position = UDim2.fromOffset(0, 66),
-		Size = UDim2.new(1, 0, 1, -66),
+		Size = UDim2.new(1, -2, 1, -72),
 		BackgroundTransparency = 1,
 		Parent = content
 	})
@@ -2086,7 +2131,7 @@ function Anchorline:CreateWindow(options)
 	self:_makeDraggable()
 	self:_makeResizable()
 
-	local toggleKey = normalizeKey(options.ToggleKey or options.HideKey or Enum.KeyCode.RightControl)
+	local toggleKey = normalizeKey(options.ToggleKey or options.HideKey or Enum.KeyCode.RightShift)
 	self._connections[#self._connections + 1] = UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or isTyping() then
 			return
