@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.0.0"
+Anchorline.Version = "3.1.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.Motion = {
@@ -4713,5 +4713,12 @@ function Anchorline:SetTheme(name, theme)
 	end
 	return Anchorline
 end
+
+local anchorlineMetatable = getmetatable(Anchorline) or {}
+anchorlineMetatable.__call = function(self, options)
+	return self:CreateWindow(options)
+end
+setmetatable(Anchorline, anchorlineMetatable)
+
 
 return Anchorline
