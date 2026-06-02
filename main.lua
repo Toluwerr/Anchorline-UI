@@ -2406,7 +2406,7 @@ function Window:_createElement(tab, titleText, searchText, height)
 	local frame = new("Frame", {
 		Name = tostring(titleText or "Element"),
 		Size = UDim2.new(1, 0, 0, height or 54),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		AutomaticSize = Enum.AutomaticSize.None,
 		BackgroundTransparency = self.FrostedGlass and 0.14 or 0,
 		ClipsDescendants = true,
 		Parent = tab.Page
@@ -4240,13 +4240,17 @@ function Tab:CreateHero(options)
 	local bodyText = tostring(options.Content or options.Text or "")
 	local height = tonumber(options.Height) or 132
 	local frame = window:_createElement(self, titleText, titleText .. " " .. subtitleText .. " " .. bodyText .. " hero header", height)
+	frame.AutomaticSize = Enum.AutomaticSize.None
+	local inheritedLayout = frame:FindFirstChildOfClass("UIListLayout")
+	if inheritedLayout then inheritedLayout:Destroy() end
 	frame:SetAttribute("AnchorlineMinWidth", 420)
 	frame.ClipsDescendants = true
 	frame.BackgroundTransparency = window.FrostedGlass and 0.08 or frame.BackgroundTransparency
+	local railHeight = math.max(42, math.min(height - 32, 96))
 	local accentRail = new("Frame", {
 		Name = "HeroAccent",
 		Position = UDim2.fromOffset(0, 16),
-		Size = UDim2.new(0, 5, 1, -32),
+		Size = UDim2.fromOffset(5, railHeight),
 		BorderSizePixel = 0,
 		Parent = frame
 	}, {corner(3)})
@@ -6676,25 +6680,26 @@ function Window:_renderCommandPalette(query)
 			local row = new("TextButton", {
 				Name = "CommandRow",
 				Size = UDim2.new(1, 0, 0, 52),
-				BackgroundTransparency = self.FrostedGlass and 0.12 or 0,
+				BackgroundTransparency = 0,
 				AutoButtonColor = false,
 				Text = "",
-				Parent = list
+				Parent = list,
+				ZIndex = 183
 			}, {corner(14), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 			self:_track(row, {BackgroundColor3 = "Surface"})
-			local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = self.FrostedGlass and 0.16 or 0, Parent = row}, {corner(10)})
+			local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(28, 28), BackgroundTransparency = 0, Parent = row, ZIndex = 184}, {corner(10)})
 			self:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
 			anchorlineMakeIcon(self, iconBox, item.Icon or "terminal", 18, anchorlineKindColor(self, item.Type or "Info"), getThemeValue(self, "AccentSoft"))
-			local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 7), Size = UDim2.new(1, -150, 0, 20), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or "Command"), Parent = row})
+			local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 7), Size = UDim2.new(1, -150, 0, 20), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or "Command"), Parent = row, ZIndex = 184})
 			self:_track(title, {TextColor3 = "Text"})
-			local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -150, 0, 16), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Description or ""), Parent = row})
+			local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 28), Size = UDim2.new(1, -150, 0, 16), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Description or ""), Parent = row, ZIndex = 184})
 			self:_track(desc, {TextColor3 = "TextMuted"})
 			if item.Shortcut then
 				local key = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(82, 24), BackgroundTransparency = self.FrostedGlass and 0.1 or 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = tostring(item.Shortcut), Parent = row}, {corner(8)})
 				self:_track(key, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
 			end
-			row.MouseEnter:Connect(function() tween(row, Anchorline.Motion.Micro, {BackgroundTransparency = self.FrostedGlass and 0.04 or 0}, Enum.EasingStyle.Quint) end)
-			row.MouseLeave:Connect(function() tween(row, Anchorline.Motion.Fast, {BackgroundTransparency = self.FrostedGlass and 0.12 or 0}, Enum.EasingStyle.Quint) end)
+			row.MouseEnter:Connect(function() tween(row, Anchorline.Motion.Micro, {BackgroundTransparency = 0.04}, Enum.EasingStyle.Quint) end)
+			row.MouseLeave:Connect(function() tween(row, Anchorline.Motion.Fast, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint) end)
 			row.MouseButton1Click:Connect(function()
 				self:CloseCommandPalette()
 				safeCall(item.Callback, item, self)
@@ -6711,11 +6716,14 @@ function Window:_ensureCommandPalette()
 	if self.CommandPalette and self.CommandPalette.Root and self.CommandPalette.Root.Parent then
 		return self.CommandPalette
 	end
-	local overlay = new("Frame", {
+	local overlay = new("TextButton", {
 		Name = "CommandPaletteOverlay",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Visible = false,
+		AutoButtonColor = false,
+		Text = "",
+		Active = true,
 		Parent = self.Gui,
 		ZIndex = 180
 	})
@@ -6725,7 +6733,8 @@ function Window:_ensureCommandPalette()
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 74),
 		Size = UDim2.fromOffset(560, 420),
-		BackgroundTransparency = self.FrostedGlass and 0.08 or 0,
+		BackgroundTransparency = 0,
+		Active = true,
 		Parent = overlay,
 		ZIndex = 181
 	}, {corner(22), stroke(getThemeValue(self, "Stroke"), 1, 0), padding(16, 16, 16, 16)})
@@ -6735,7 +6744,7 @@ function Window:_ensureCommandPalette()
 	self:_track(title, {TextColor3 = "Text"})
 	local close = new("TextButton", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, -2), Size = UDim2.fromOffset(34, 30), BackgroundTransparency = 1, Text = "×", Font = Enum.Font.GothamBold, TextSize = 18, AutoButtonColor = false, Parent = card, ZIndex = 182})
 	self:_track(close, {TextColor3 = "TextMuted"})
-	local search = new("TextBox", {Name = "Search", Position = UDim2.fromOffset(0, 38), Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = self.FrostedGlass and 0.08 or 0, Text = "", PlaceholderText = "Search commands, tabs, and actions", ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card, ZIndex = 182}, {corner(12), stroke(getThemeValue(self, "StrokeSoft"), 1, 0), padding(12, 12, 0, 0)})
+	local search = new("TextBox", {Name = "Search", Position = UDim2.fromOffset(0, 38), Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 0, Text = "", PlaceholderText = "Search commands, tabs, and actions", ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card, ZIndex = 182}, {corner(12), stroke(getThemeValue(self, "StrokeSoft"), 1, 0), padding(12, 12, 0, 0)})
 	self:_track(search, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
 	local list = new("ScrollingFrame", {Name = "Results", Position = UDim2.fromOffset(0, 90), Size = UDim2.new(1, 0, 1, -90), BackgroundTransparency = 1, BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), ScrollBarThickness = 4, ScrollBarImageTransparency = 0.25, Parent = card, ZIndex = 182}, {listLayout(Enum.FillDirection.Vertical, 8)})
 	self:_track(list, {ScrollBarImageColor3 = "Accent"})
@@ -6743,11 +6752,10 @@ function Window:_ensureCommandPalette()
 	self:_track(empty, {TextColor3 = "TextMuted"})
 	close.MouseButton1Click:Connect(function() self:CloseCommandPalette() end)
 	search:GetPropertyChangedSignal("Text"):Connect(function() self:_renderCommandPalette(search.Text) end)
-	overlay.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			self:CloseCommandPalette()
-		end
+	overlay.MouseButton1Click:Connect(function()
+		self:CloseCommandPalette()
 	end)
+	card.InputBegan:Connect(function() end)
 	self.CommandPalette = {Root = overlay, Card = card, Scale = scale, Search = search, List = list, Empty = empty}
 	return self.CommandPalette
 end
@@ -6760,7 +6768,7 @@ function Window:OpenCommandPalette()
 	palette.Scale.Scale = 0.96
 	palette.Search.Text = ""
 	self:_renderCommandPalette("")
-	tween(palette.Root, Anchorline.Motion.Fast, {BackgroundTransparency = 0.48}, Enum.EasingStyle.Quint)
+	tween(palette.Root, Anchorline.Motion.Fast, {BackgroundTransparency = 0.22}, Enum.EasingStyle.Quint)
 	tween(palette.Card, Anchorline.Motion.Panel, {Position = UDim2.new(0.5, 0, 0, 74)}, Enum.EasingStyle.Quint)
 	tween(palette.Scale, Anchorline.Motion.Panel, {Scale = 1}, Enum.EasingStyle.Back)
 	task.defer(function()
@@ -6884,9 +6892,12 @@ function Tab:CreateModernCard(options)
 	local bodyHeight = measureWrappedText(description, 13, Enum.Font.Gotham, 420)
 	local height = math.max(96, 72 + bodyHeight + (options.Action and 42 or 0))
 	local frame = window:_createElement(self, title, title .. " modern card", height)
+	frame.AutomaticSize = Enum.AutomaticSize.None
+	local inheritedLayout = frame:FindFirstChildOfClass("UIListLayout")
+	if inheritedLayout then inheritedLayout:Destroy() end
 	frame.BackgroundTransparency = window.FrostedGlass and 0.1 or 0
 	frame:SetAttribute("AnchorlineMinWidth", 430)
-	local accent = new("Frame", {Position = UDim2.fromOffset(0, 0), Size = UDim2.new(0, 4, 1, 0), BorderSizePixel = 0, BackgroundColor3 = anchorlineKindColor(window, options.Type or "Info"), Parent = frame}, {corner(4)})
+	local accent = new("Frame", {Position = UDim2.fromOffset(0, 14), Size = UDim2.fromOffset(4, math.max(38, math.min(height - 28, 82))), BorderSizePixel = 0, BackgroundColor3 = anchorlineKindColor(window, options.Type or "Info"), Parent = frame}, {corner(4)})
 	local iconBox = new("Frame", {Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(38, 38), BackgroundTransparency = window.FrostedGlass and 0.14 or 0, Parent = frame}, {corner(14)})
 	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
 	anchorlineMakeIcon(window, iconBox, options.Icon or "sparkles", 22, anchorlineKindColor(window, options.Type or "Info"), getThemeValue(window, "AccentSoft"))
@@ -7277,6 +7288,291 @@ Anchorline.VisualComponents = {
 	"CommandPalette",
 	"Dialog"
 }
+
+
+
+-- Anchorline final stability patch: layout, palette, and accent-line fixes.
+local function anchorlineStripLayoutObjects(frame)
+	if not frame then return end
+	for _, child in ipairs(frame:GetChildren()) do
+		if child:IsA("UIListLayout") or child:IsA("UIPadding") or child:IsA("UIGridLayout") then
+			child:Destroy()
+		end
+	end
+end
+
+local function anchorlineSetFixedCard(frame, height)
+	if not frame then return end
+	frame.AutomaticSize = Enum.AutomaticSize.None
+	frame.Size = UDim2.new(1, 0, 0, math.max(48, math.floor(tonumber(height) or 80)))
+	frame.ClipsDescendants = true
+	anchorlineStripLayoutObjects(frame)
+end
+
+local function anchorlineSafeTextHeight(text, size, font, width)
+	return math.max(size + 4, measureWrappedText(tostring(text or ""), size, font, math.max(120, math.floor(width or 360))))
+end
+
+function Tab:CreateInfoBox(options)
+	options = options or {}
+	local window = self.Window
+	local kind = tostring(options.Type or options.Kind or "Info")
+	local titleText = tostring(options.Title or options.Name or kind)
+	local bodyText = tostring(options.Content or options.Text or options.Description or "")
+	local frame = window:_createElement(self, titleText, titleText .. " " .. bodyText .. " info notice", 86)
+	anchorlineSetFixedCard(frame, 86)
+	frame:SetAttribute("AnchorlineMinWidth", 390)
+	local accent = anchorlineKindColor(window, kind)
+	local rail = new("Frame", {Name = "AccentRail", Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(5, 50), BackgroundColor3 = accent, BorderSizePixel = 0, Parent = frame}, {corner(3)})
+	local title = new("TextLabel", {Name = "Title", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 15), Size = UDim2.new(1, -58, 0, 22), Font = Enum.Font.GothamMedium, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	local body = new("TextLabel", {Name = "Body", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 43), Size = UDim2.new(1, -58, 0, 24), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	window:_track(body, {TextColor3 = "TextMuted"})
+	local resizeQueued = false
+	local lastWidth = 0
+	local function resize(force)
+		if not frame or not frame.Parent then return end
+		local width = math.max(320, math.floor(frame.AbsoluteSize.X > 0 and frame.AbsoluteSize.X or (window.SmartContentMinWidth or 390)))
+		if not force and math.abs(width - lastWidth) < 2 then return end
+		lastWidth = width
+		local textWidth = math.max(150, width - 76)
+		local titleHeight = anchorlineSafeTextHeight(titleText, 15, Enum.Font.GothamMedium, textWidth)
+		local bodyHeight = anchorlineSafeTextHeight(bodyText, 13, Enum.Font.Gotham, textWidth)
+		title.Size = UDim2.new(1, -58, 0, titleHeight)
+		body.Position = UDim2.fromOffset(36, 22 + titleHeight + 9)
+		body.Size = UDim2.new(1, -58, 0, bodyHeight)
+		local height = math.max(82, 22 + titleHeight + 9 + bodyHeight + 20)
+		frame.Size = UDim2.new(1, 0, 0, height)
+		rail.Position = UDim2.fromOffset(18, 18)
+		rail.Size = UDim2.fromOffset(5, math.max(36, height - 36))
+		window:_refreshPageCanvases()
+	end
+	local function queue(force)
+		if resizeQueued then return end
+		resizeQueued = true
+		task.defer(function()
+			resizeQueued = false
+			resize(force)
+			window:_queueSmartResize()
+		end)
+	end
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() queue(false) end)
+	queue(true)
+	task.delay(0.12, function() resize(true) end)
+	local controller = {Type = "InfoBox", Frame = frame, Title = title, Body = body, Accent = rail}
+	function controller:Set(value)
+		bodyText = tostring(value or "")
+		body.Text = bodyText
+		frame:SetAttribute("SearchText", titleText .. " " .. bodyText)
+		lastWidth = 0
+		queue(true)
+	end
+	function controller:SetTitle(value)
+		titleText = tostring(value or "")
+		title.Text = titleText
+		frame:SetAttribute("SearchText", titleText .. " " .. bodyText)
+		lastWidth = 0
+		queue(true)
+	end
+	function controller:Get() return bodyText end
+	return controller
+end
+
+function Tab:CreateHero(options)
+	options = options or {}
+	local window = self.Window
+	local titleText = tostring(options.Title or options.Name or self.Name)
+	local subtitleText = tostring(options.Subtitle or options.Description or "")
+	local bodyText = tostring(options.Content or options.Text or "")
+	local widthGuess = tonumber(window.SmartContentMinWidth) or 420
+	local bodyHeight = bodyText ~= "" and anchorlineSafeTextHeight(bodyText, 13, Enum.Font.Gotham, widthGuess - 52) or 0
+	local height = tonumber(options.Height) or math.max(112, 88 + bodyHeight)
+	local frame = window:_createElement(self, titleText, titleText .. " " .. subtitleText .. " " .. bodyText .. " hero header", height)
+	anchorlineSetFixedCard(frame, height)
+	frame:SetAttribute("AnchorlineMinWidth", 420)
+	local accent = anchorlineKindColor(window, options.Type or options.Kind or "Info")
+	local rail = new("Frame", {Name = "HeroAccent", Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(5, math.max(42, height - 36)), BorderSizePixel = 0, BackgroundColor3 = accent, Parent = frame}, {corner(3)})
+	local iconBox = new("Frame", {Name = "HeroIconBox", Position = UDim2.fromOffset(36, 18), Size = UDim2.fromOffset(46, 46), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Parent = frame}, {corner(14), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+	anchorlineMakeIcon(window, iconBox, options.Icon or options.Image or "sparkles", 23, accent, getThemeValue(window, "AccentSoft"))
+	local title = new("TextLabel", {Name = "HeroTitle", BackgroundTransparency = 1, Position = UDim2.fromOffset(96, 17), Size = UDim2.new(1, -116, 0, 24), Font = Enum.Font.GothamBold, TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	local subtitle = new("TextLabel", {Name = "HeroSubtitle", BackgroundTransparency = 1, Position = UDim2.fromOffset(96, 44), Size = UDim2.new(1, -116, 0, 18), Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = subtitleText, Parent = frame})
+	window:_track(subtitle, {TextColor3 = "TextMuted"})
+	local body = new("TextLabel", {Name = "HeroBody", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 78), Size = UDim2.new(1, -56, 0, math.max(0, bodyHeight)), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	window:_track(body, {TextColor3 = "TextMuted"})
+	local function relayout()
+		if not frame or not frame.Parent then return end
+		local w = math.max(320, frame.AbsoluteSize.X)
+		local h = bodyText ~= "" and anchorlineSafeTextHeight(bodyText, 13, Enum.Font.Gotham, w - 56) or 0
+		body.Size = UDim2.new(1, -56, 0, h)
+		local newHeight = math.max(112, 88 + h)
+		frame.Size = UDim2.new(1, 0, 0, newHeight)
+		rail.Size = UDim2.fromOffset(5, math.max(42, newHeight - 36))
+		window:_refreshPageCanvases()
+	end
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(relayout) end)
+	task.defer(relayout)
+	local controller = {Type = "Hero", Frame = frame, Title = title, Subtitle = subtitle, Body = body}
+	function controller:SetTitle(value) titleText = tostring(value or ""); title.Text = titleText; frame:SetAttribute("SearchText", titleText .. " " .. subtitleText .. " " .. bodyText) end
+	function controller:SetSubtitle(value) subtitleText = tostring(value or ""); subtitle.Text = subtitleText; frame:SetAttribute("SearchText", titleText .. " " .. subtitleText .. " " .. bodyText) end
+	function controller:SetContent(value) bodyText = tostring(value or ""); body.Text = bodyText; frame:SetAttribute("SearchText", titleText .. " " .. subtitleText .. " " .. bodyText); relayout(); window:_queueSmartResize() end
+	return controller
+end
+
+function Tab:CreateModernCard(options)
+	options = options or {}
+	local window = self.Window
+	local titleText = tostring(options.Name or options.Title or "Modern Card")
+	local description = tostring(options.Description or options.Content or "")
+	local baseWidth = tonumber(window.SmartContentMinWidth) or 430
+	local bodyHeight = description ~= "" and anchorlineSafeTextHeight(description, 13, Enum.Font.Gotham, baseWidth - 92) or 20
+	local height = math.max(92, 64 + bodyHeight + (options.Action and 44 or 0))
+	local frame = window:_createElement(self, titleText, titleText .. " " .. description .. " modern card", height)
+	anchorlineSetFixedCard(frame, height)
+	frame:SetAttribute("AnchorlineMinWidth", 430)
+	frame.BackgroundTransparency = window.FrostedGlass and 0.08 or 0
+	local accentColor = anchorlineKindColor(window, options.Type or options.Kind or "Info")
+	local accent = new("Frame", {Name = "AccentRail", Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(5, math.max(36, math.min(height - 36, 74))), BorderSizePixel = 0, BackgroundColor3 = accentColor, Parent = frame}, {corner(3)})
+	local iconBox = new("Frame", {Name = "IconBox", Position = UDim2.fromOffset(36, 18), Size = UDim2.fromOffset(38, 38), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Parent = frame}, {corner(14), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+	anchorlineMakeIcon(window, iconBox, options.Icon or "sparkles", 22, accentColor, getThemeValue(window, "AccentSoft"))
+	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(88, 16), Size = UDim2.new(1, -108, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(88, 42), Size = UDim2.new(1, -108, 0, bodyHeight), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
+	window:_track(body, {TextColor3 = "TextMuted"})
+	local controller = {Type = "ModernCard", Frame = frame, Title = title, Description = body, Accent = accent}
+	if options.Action then
+		local button = anchorlineVisualButton(window, frame, options.ActionText or "Open", 104, true, function() safeCall(options.Action, controller) end)
+		button.AnchorPoint = Vector2.new(1, 1)
+		button.Position = UDim2.new(1, -16, 1, -14)
+		controller.Button = button
+	end
+	local function relayout()
+		if not frame or not frame.Parent then return end
+		local w = math.max(340, frame.AbsoluteSize.X)
+		local h = description ~= "" and anchorlineSafeTextHeight(description, 13, Enum.Font.Gotham, w - 108) or 20
+		body.Size = UDim2.new(1, -108, 0, h)
+		local newHeight = math.max(92, 64 + h + (options.Action and 44 or 0))
+		frame.Size = UDim2.new(1, 0, 0, newHeight)
+		accent.Size = UDim2.fromOffset(5, math.max(36, math.min(newHeight - 36, 82)))
+		window:_refreshPageCanvases()
+	end
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() task.defer(relayout) end)
+	task.defer(relayout)
+	function controller:SetTitle(value) titleText = tostring(value or ""); title.Text = titleText; frame:SetAttribute("SearchText", titleText .. " " .. description) end
+	function controller:SetDescription(value) description = tostring(value or ""); body.Text = description; frame:SetAttribute("SearchText", titleText .. " " .. description); relayout(); window:_queueSmartResize() end
+	return controller
+end
+
+function Window:_ensureCommandPalette()
+	if self.CommandPalette and self.CommandPalette.Root and self.CommandPalette.Root.Parent then
+		return self.CommandPalette
+	end
+	local overlay = new("Frame", {Name = "CommandPaletteOverlay", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, Active = true, Parent = self.Gui, ZIndex = 180})
+	overlay.BackgroundColor3 = getThemeValue(self, "Overlay")
+	local outside = new("TextButton", {Name = "DismissArea", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, Parent = overlay, ZIndex = 181})
+	local card = new("Frame", {Name = "CommandPalette", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 72), Size = UDim2.fromOffset(math.min(620, math.max(520, self.Root.AbsoluteSize.X - 120)), 430), BackgroundTransparency = 0, Active = true, ClipsDescendants = true, Parent = overlay, ZIndex = 190}, {corner(22), stroke(getThemeValue(self, "Stroke"), 1, 0), padding(18, 18, 16, 16)})
+	self:_track(card, {BackgroundColor3 = "Panel"})
+	local scale = new("UIScale", {Scale = 0.98, Parent = card})
+	local title = new("TextLabel", {Name = "Title", BackgroundTransparency = 1, Size = UDim2.new(1, -40, 0, 24), Font = Enum.Font.GothamBold, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, Text = "Command Palette", Parent = card, ZIndex = 191})
+	self:_track(title, {TextColor3 = "Text"})
+	local close = new("TextButton", {Name = "Close", AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, -2), Size = UDim2.fromOffset(34, 30), BackgroundTransparency = 1, Text = "×", Font = Enum.Font.GothamBold, TextSize = 18, AutoButtonColor = false, Parent = card, ZIndex = 192})
+	self:_track(close, {TextColor3 = "TextMuted"})
+	local search = new("TextBox", {Name = "Search", Position = UDim2.fromOffset(0, 40), Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 0, Text = "", PlaceholderText = "Search commands, tabs, and actions", ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card, ZIndex = 191}, {corner(12), stroke(getThemeValue(self, "StrokeSoft"), 1, 0), padding(12, 12, 0, 0)})
+	self:_track(search, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
+	local list = new("ScrollingFrame", {Name = "Results", Position = UDim2.fromOffset(0, 94), Size = UDim2.new(1, 0, 1, -94), BackgroundTransparency = 1, BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), Active = true, ScrollingEnabled = true, ClipsDescendants = true, ScrollBarThickness = 4, ScrollBarImageTransparency = 0.18, Parent = card, ZIndex = 191}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	self:_track(list, {ScrollBarImageColor3 = "Accent"})
+	local empty = new("TextLabel", {Name = "Empty", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.62), Size = UDim2.new(1, -40, 0, 40), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, Text = "No matching commands", Visible = false, Parent = card, ZIndex = 192})
+	self:_track(empty, {TextColor3 = "TextMuted"})
+	close.MouseButton1Click:Connect(function() self:CloseCommandPalette() end)
+	outside.MouseButton1Click:Connect(function() self:CloseCommandPalette() end)
+	search:GetPropertyChangedSignal("Text"):Connect(function() self:_renderCommandPalette(search.Text) end)
+	self.CommandPalette = {Root = overlay, Card = card, Scale = scale, Search = search, List = list, Empty = empty}
+	return self.CommandPalette
+end
+
+function Window:_renderCommandPalette(query)
+	if not self.CommandPalette or not self.CommandPalette.List then return end
+	local list = self.CommandPalette.List
+	anchorlineClearChildren(list)
+	query = tostring(query or ""):lower()
+	local shown = 0
+	for _, item in ipairs(self:_collectCommandPaletteItems()) do
+		local haystack = (tostring(item.Name or "") .. " " .. tostring(item.Description or "")):lower()
+		if query == "" or haystack:find(query, 1, true) then
+			shown += 1
+			local row = new("TextButton", {Name = "CommandRow", Size = UDim2.new(1, -2, 0, 58), BackgroundTransparency = 0, AutoButtonColor = false, Text = "", Parent = list, ZIndex = 193}, {corner(14), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+			self:_track(row, {BackgroundColor3 = "Surface"})
+			local accentColor = anchorlineKindColor(self, item.Type or "Info")
+			local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(32, 32), BackgroundTransparency = self.FrostedGlass and 0.12 or 0, Parent = row, ZIndex = 194}, {corner(10)})
+			self:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+			anchorlineMakeIcon(self, iconBox, item.Icon or "terminal", 18, accentColor, getThemeValue(self, "AccentSoft"))
+			local rowTitle = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 8), Size = UDim2.new(1, -160, 0, 21), Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or "Command"), TextTransparency = 0, Parent = row, ZIndex = 194})
+			self:_track(rowTitle, {TextColor3 = "Text"})
+			local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 31), Size = UDim2.new(1, -160, 0, 17), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Description or ""), TextTransparency = 0, Parent = row, ZIndex = 194})
+			self:_track(desc, {TextColor3 = "TextMuted"})
+			if item.Shortcut then
+				local key = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(82, 24), BackgroundTransparency = self.FrostedGlass and 0.1 or 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = tostring(item.Shortcut), Parent = row, ZIndex = 195}, {corner(8)})
+				self:_track(key, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+			end
+			row.MouseEnter:Connect(function() tween(row, Anchorline.Motion.Micro, {BackgroundColor3 = getThemeValue(self, "SurfaceHover")}, Enum.EasingStyle.Quint) end)
+			row.MouseLeave:Connect(function() tween(row, Anchorline.Motion.Fast, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint) end)
+			row.MouseButton1Click:Connect(function()
+				self:CloseCommandPalette()
+				safeCall(item.Callback, item, self)
+			end)
+		end
+	end
+	list.CanvasSize = UDim2.fromOffset(0, math.max(0, shown * 66))
+	if self.CommandPalette.Empty then self.CommandPalette.Empty.Visible = shown == 0 end
+end
+
+function Window:OpenCommandPalette()
+	local palette = self:_ensureCommandPalette()
+	palette.Root.Visible = true
+	palette.Root.BackgroundTransparency = 1
+	palette.Card.BackgroundTransparency = 0
+	palette.Card.Position = UDim2.new(0.5, 0, 0, 54)
+	palette.Scale.Scale = 0.98
+	palette.Search.Text = ""
+	self:_renderCommandPalette("")
+	tween(palette.Root, Anchorline.Motion.Fast, {BackgroundTransparency = 0.42}, Enum.EasingStyle.Quint)
+	tween(palette.Card, Anchorline.Motion.Panel, {Position = UDim2.new(0.5, 0, 0, 74)}, Enum.EasingStyle.Quint)
+	tween(palette.Scale, Anchorline.Motion.Panel, {Scale = 1}, Enum.EasingStyle.Quint)
+	task.defer(function()
+		if palette.Search and palette.Search.Parent then palette.Search:CaptureFocus() end
+	end)
+	return self
+end
+
+function Window:CloseCommandPalette()
+	local palette = self.CommandPalette
+	if not palette or not palette.Root or not palette.Root.Parent then return self end
+	pcall(function() palette.Search:ReleaseFocus() end)
+	tween(palette.Root, Anchorline.Motion.Exit, {BackgroundTransparency = 1}, Enum.EasingStyle.Quint)
+	tween(palette.Card, Anchorline.Motion.Exit, {Position = UDim2.new(0.5, 0, 0, 54)}, Enum.EasingStyle.Quint)
+	tween(palette.Scale, Anchorline.Motion.Exit, {Scale = 0.98}, Enum.EasingStyle.Quint)
+	task.delay(Anchorline.Motion.Exit + 0.04, function()
+		if palette.Root and palette.Root.Parent then palette.Root.Visible = false end
+	end)
+	return self
+end
+
+function Window:RefreshLayout(animated)
+	self:_refreshAdaptiveLayouts()
+	self:_refreshPageCanvases()
+	task.defer(function()
+		if self.Root and self.Root.Parent then
+			self:_refreshAdaptiveLayouts()
+			self:_refreshPageCanvases()
+		end
+	end)
+	return self:SmartResize(animated ~= false)
+end
+
+Anchorline.Version = "3.10.0-stability-patch"
+Anchorline.Build = "main-fixed-actual"
 
 local anchorlineMetatable = getmetatable(Anchorline) or {}
 anchorlineMetatable.__call = function(self, options)
