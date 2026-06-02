@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "1.1.0"
+Anchorline.Version = "2.0.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 
@@ -139,128 +139,117 @@ local function resolveParent()
 end
 
 Anchorline.Themes = {
-	Foundry = {
-		Background = Color3.fromRGB(12, 14, 16),
-		Panel = Color3.fromRGB(17, 20, 23),
-		PanelAlt = Color3.fromRGB(22, 25, 29),
-		Surface = Color3.fromRGB(27, 31, 36),
-		SurfaceHover = Color3.fromRGB(34, 39, 45),
-		Input = Color3.fromRGB(13, 16, 19),
-		Stroke = Color3.fromRGB(45, 52, 60),
-		StrokeSoft = Color3.fromRGB(34, 40, 47),
-		Text = Color3.fromRGB(232, 236, 241),
-		TextMuted = Color3.fromRGB(151, 160, 171),
-		TextFaint = Color3.fromRGB(99, 109, 121),
-		Accent = Color3.fromRGB(125, 164, 139),
-		AccentSoft = Color3.fromRGB(35, 55, 44),
-		AccentText = Color3.fromRGB(8, 11, 10),
-		Success = Color3.fromRGB(91, 178, 123),
-		Warning = Color3.fromRGB(205, 162, 88),
-		Danger = Color3.fromRGB(203, 83, 83),
-		Overlay = Color3.fromRGB(0, 0, 0)
+	Workbench = {
+		Background = Color3.fromRGB(241, 243, 240),
+		Panel = Color3.fromRGB(250, 250, 247),
+		PanelAlt = Color3.fromRGB(246, 247, 244),
+		Surface = Color3.fromRGB(255, 255, 252),
+		SurfaceHover = Color3.fromRGB(236, 241, 237),
+		Input = Color3.fromRGB(255, 255, 253),
+		Stroke = Color3.fromRGB(199, 207, 201),
+		StrokeSoft = Color3.fromRGB(218, 224, 219),
+		Text = Color3.fromRGB(35, 42, 39),
+		TextMuted = Color3.fromRGB(94, 105, 101),
+		TextFaint = Color3.fromRGB(134, 144, 140),
+		Accent = Color3.fromRGB(82, 121, 107),
+		AccentHover = Color3.fromRGB(70, 108, 95),
+		AccentSoft = Color3.fromRGB(223, 235, 230),
+		AccentText = Color3.fromRGB(255, 255, 252),
+		ControlKnob = Color3.fromRGB(255, 255, 252),
+		Success = Color3.fromRGB(76, 142, 99),
+		Warning = Color3.fromRGB(166, 121, 54),
+		Danger = Color3.fromRGB(174, 66, 60),
+		Overlay = Color3.fromRGB(53, 61, 58)
 	},
-	Graphite = {
-		Background = Color3.fromRGB(12, 14, 16),
-		Panel = Color3.fromRGB(17, 20, 23),
-		PanelAlt = Color3.fromRGB(22, 25, 29),
-		Surface = Color3.fromRGB(27, 31, 36),
-		SurfaceHover = Color3.fromRGB(34, 39, 45),
-		Input = Color3.fromRGB(13, 16, 19),
-		Stroke = Color3.fromRGB(45, 52, 60),
-		StrokeSoft = Color3.fromRGB(34, 40, 47),
-		Text = Color3.fromRGB(232, 236, 241),
-		TextMuted = Color3.fromRGB(151, 160, 171),
-		TextFaint = Color3.fromRGB(99, 109, 121),
-		Accent = Color3.fromRGB(125, 164, 139),
-		AccentSoft = Color3.fromRGB(35, 55, 44),
-		AccentText = Color3.fromRGB(8, 11, 10),
-		Success = Color3.fromRGB(91, 178, 123),
-		Warning = Color3.fromRGB(205, 162, 88),
-		Danger = Color3.fromRGB(203, 83, 83),
-		Overlay = Color3.fromRGB(0, 0, 0)
+	Ledger = {
+		Background = Color3.fromRGB(244, 242, 237),
+		Panel = Color3.fromRGB(253, 252, 248),
+		PanelAlt = Color3.fromRGB(248, 246, 241),
+		Surface = Color3.fromRGB(255, 255, 252),
+		SurfaceHover = Color3.fromRGB(238, 235, 228),
+		Input = Color3.fromRGB(255, 255, 252),
+		Stroke = Color3.fromRGB(207, 200, 189),
+		StrokeSoft = Color3.fromRGB(226, 221, 213),
+		Text = Color3.fromRGB(48, 43, 38),
+		TextMuted = Color3.fromRGB(104, 96, 86),
+		TextFaint = Color3.fromRGB(145, 136, 125),
+		Accent = Color3.fromRGB(130, 94, 63),
+		AccentHover = Color3.fromRGB(112, 80, 53),
+		AccentSoft = Color3.fromRGB(238, 226, 214),
+		AccentText = Color3.fromRGB(255, 252, 247),
+		ControlKnob = Color3.fromRGB(255, 252, 247),
+		Success = Color3.fromRGB(83, 134, 91),
+		Warning = Color3.fromRGB(168, 124, 54),
+		Danger = Color3.fromRGB(177, 69, 63),
+		Overlay = Color3.fromRGB(68, 62, 55)
 	},
-	Slate = {
-		Background = Color3.fromRGB(16, 17, 19),
-		Panel = Color3.fromRGB(22, 24, 27),
-		PanelAlt = Color3.fromRGB(27, 30, 34),
-		Surface = Color3.fromRGB(33, 37, 42),
-		SurfaceHover = Color3.fromRGB(42, 47, 53),
-		Input = Color3.fromRGB(18, 20, 23),
-		Stroke = Color3.fromRGB(55, 61, 69),
-		StrokeSoft = Color3.fromRGB(40, 45, 52),
-		Text = Color3.fromRGB(235, 237, 240),
-		TextMuted = Color3.fromRGB(156, 163, 174),
-		TextFaint = Color3.fromRGB(104, 112, 124),
-		Accent = Color3.fromRGB(150, 164, 180),
-		AccentSoft = Color3.fromRGB(48, 55, 64),
-		AccentText = Color3.fromRGB(13, 15, 17),
-		Success = Color3.fromRGB(88, 174, 120),
-		Warning = Color3.fromRGB(205, 160, 82),
-		Danger = Color3.fromRGB(201, 82, 82),
-		Overlay = Color3.fromRGB(0, 0, 0)
+	Field = {
+		Background = Color3.fromRGB(239, 244, 238),
+		Panel = Color3.fromRGB(250, 252, 249),
+		PanelAlt = Color3.fromRGB(244, 249, 244),
+		Surface = Color3.fromRGB(255, 255, 252),
+		SurfaceHover = Color3.fromRGB(230, 239, 231),
+		Input = Color3.fromRGB(255, 255, 253),
+		Stroke = Color3.fromRGB(196, 210, 198),
+		StrokeSoft = Color3.fromRGB(216, 226, 218),
+		Text = Color3.fromRGB(34, 46, 38),
+		TextMuted = Color3.fromRGB(88, 108, 95),
+		TextFaint = Color3.fromRGB(128, 146, 135),
+		Accent = Color3.fromRGB(77, 128, 86),
+		AccentHover = Color3.fromRGB(64, 112, 74),
+		AccentSoft = Color3.fromRGB(221, 236, 224),
+		AccentText = Color3.fromRGB(255, 255, 252),
+		ControlKnob = Color3.fromRGB(255, 255, 252),
+		Success = Color3.fromRGB(67, 139, 88),
+		Warning = Color3.fromRGB(162, 124, 54),
+		Danger = Color3.fromRGB(174, 66, 60),
+		Overlay = Color3.fromRGB(52, 67, 57)
 	},
-	Porcelain = {
-		Background = Color3.fromRGB(235, 237, 240),
-		Panel = Color3.fromRGB(248, 249, 250),
-		PanelAlt = Color3.fromRGB(242, 244, 246),
-		Surface = Color3.fromRGB(232, 235, 239),
-		SurfaceHover = Color3.fromRGB(223, 227, 233),
-		Input = Color3.fromRGB(255, 255, 255),
-		Stroke = Color3.fromRGB(186, 194, 204),
-		StrokeSoft = Color3.fromRGB(211, 216, 224),
-		Text = Color3.fromRGB(31, 35, 41),
-		TextMuted = Color3.fromRGB(92, 101, 113),
-		TextFaint = Color3.fromRGB(133, 143, 156),
-		Accent = Color3.fromRGB(89, 127, 102),
-		AccentSoft = Color3.fromRGB(216, 228, 220),
-		AccentText = Color3.fromRGB(255, 255, 255),
-		Success = Color3.fromRGB(69, 146, 94),
-		Warning = Color3.fromRGB(168, 124, 56),
-		Danger = Color3.fromRGB(183, 67, 67),
-		Overlay = Color3.fromRGB(0, 0, 0)
+	Harbor = {
+		Background = Color3.fromRGB(238, 243, 245),
+		Panel = Color3.fromRGB(250, 252, 252),
+		PanelAlt = Color3.fromRGB(244, 248, 249),
+		Surface = Color3.fromRGB(255, 255, 252),
+		SurfaceHover = Color3.fromRGB(228, 237, 241),
+		Input = Color3.fromRGB(255, 255, 253),
+		Stroke = Color3.fromRGB(194, 207, 213),
+		StrokeSoft = Color3.fromRGB(216, 225, 229),
+		Text = Color3.fromRGB(34, 42, 47),
+		TextMuted = Color3.fromRGB(86, 101, 110),
+		TextFaint = Color3.fromRGB(126, 142, 151),
+		Accent = Color3.fromRGB(72, 112, 129),
+		AccentHover = Color3.fromRGB(59, 97, 113),
+		AccentSoft = Color3.fromRGB(219, 232, 237),
+		AccentText = Color3.fromRGB(255, 255, 252),
+		ControlKnob = Color3.fromRGB(255, 255, 252),
+		Success = Color3.fromRGB(69, 137, 101),
+		Warning = Color3.fromRGB(164, 122, 55),
+		Danger = Color3.fromRGB(174, 66, 60),
+		Overlay = Color3.fromRGB(52, 62, 67)
 	},
-	Evergreen = {
-		Background = Color3.fromRGB(13, 17, 15),
-		Panel = Color3.fromRGB(18, 25, 21),
-		PanelAlt = Color3.fromRGB(24, 32, 28),
-		Surface = Color3.fromRGB(31, 41, 36),
-		SurfaceHover = Color3.fromRGB(39, 51, 45),
-		Input = Color3.fromRGB(15, 20, 17),
-		Stroke = Color3.fromRGB(50, 65, 57),
-		StrokeSoft = Color3.fromRGB(37, 49, 43),
-		Text = Color3.fromRGB(231, 238, 232),
-		TextMuted = Color3.fromRGB(151, 168, 157),
-		TextFaint = Color3.fromRGB(99, 119, 107),
-		Accent = Color3.fromRGB(112, 165, 130),
-		AccentSoft = Color3.fromRGB(34, 66, 46),
-		AccentText = Color3.fromRGB(7, 12, 9),
-		Success = Color3.fromRGB(103, 193, 133),
-		Warning = Color3.fromRGB(204, 165, 86),
-		Danger = Color3.fromRGB(199, 82, 82),
-		Overlay = Color3.fromRGB(0, 0, 0)
-	},
-	Clay = {
-		Background = Color3.fromRGB(27, 23, 21),
-		Panel = Color3.fromRGB(35, 30, 27),
-		PanelAlt = Color3.fromRGB(43, 37, 33),
-		Surface = Color3.fromRGB(52, 45, 40),
-		SurfaceHover = Color3.fromRGB(62, 53, 47),
-		Input = Color3.fromRGB(30, 26, 23),
-		Stroke = Color3.fromRGB(77, 66, 58),
-		StrokeSoft = Color3.fromRGB(60, 52, 46),
-		Text = Color3.fromRGB(244, 237, 229),
-		TextMuted = Color3.fromRGB(190, 177, 164),
-		TextFaint = Color3.fromRGB(133, 120, 108),
-		Accent = Color3.fromRGB(177, 130, 93),
-		AccentSoft = Color3.fromRGB(73, 49, 36),
-		AccentText = Color3.fromRGB(18, 12, 8),
-		Success = Color3.fromRGB(92, 174, 118),
-		Warning = Color3.fromRGB(206, 160, 84),
-		Danger = Color3.fromRGB(199, 82, 82),
-		Overlay = Color3.fromRGB(0, 0, 0)
+	GraphiteLight = {
+		Background = Color3.fromRGB(239, 240, 240),
+		Panel = Color3.fromRGB(250, 250, 249),
+		PanelAlt = Color3.fromRGB(245, 246, 245),
+		Surface = Color3.fromRGB(255, 255, 253),
+		SurfaceHover = Color3.fromRGB(234, 236, 235),
+		Input = Color3.fromRGB(255, 255, 253),
+		Stroke = Color3.fromRGB(201, 205, 204),
+		StrokeSoft = Color3.fromRGB(219, 222, 221),
+		Text = Color3.fromRGB(38, 42, 43),
+		TextMuted = Color3.fromRGB(93, 101, 103),
+		TextFaint = Color3.fromRGB(135, 143, 145),
+		Accent = Color3.fromRGB(90, 107, 112),
+		AccentHover = Color3.fromRGB(76, 93, 98),
+		AccentSoft = Color3.fromRGB(226, 231, 232),
+		AccentText = Color3.fromRGB(255, 255, 252),
+		ControlKnob = Color3.fromRGB(255, 255, 252),
+		Success = Color3.fromRGB(73, 139, 97),
+		Warning = Color3.fromRGB(165, 122, 54),
+		Danger = Color3.fromRGB(174, 66, 60),
+		Overlay = Color3.fromRGB(58, 63, 64)
 	}
 }
-
 local Window = {}
 Window.__index = Window
 
@@ -268,8 +257,8 @@ local Tab = {}
 Tab.__index = Tab
 
 local function getThemeValue(window, key)
-	local theme = window.Theme or Anchorline.Themes.Foundry
-	return theme[key] or Anchorline.Themes.Foundry[key] or Color3.fromRGB(255, 255, 255)
+	local theme = window.Theme or Anchorline.Themes.Workbench
+	return theme[key] or Anchorline.Themes.Workbench[key] or Color3.fromRGB(255, 255, 255)
 end
 
 function Window:_track(instance, propertyMap)
@@ -301,13 +290,13 @@ end
 function Window:SetTheme(theme)
 	if type(theme) == "string" then
 		self.ThemeName = theme
-		self.Theme = Anchorline.Themes[theme] or Anchorline.Themes.Foundry
+		self.Theme = Anchorline.Themes[theme] or Anchorline.Themes.Workbench
 	elseif type(theme) == "table" then
 		self.ThemeName = "Custom"
 		self.Theme = theme
 	else
-		self.ThemeName = "Foundry"
-		self.Theme = Anchorline.Themes.Foundry
+		self.ThemeName = "Workbench"
+		self.Theme = Anchorline.Themes.Workbench
 	end
 	self:_applyTheme()
 	return self
@@ -610,50 +599,79 @@ end
 
 function Window:Notify(options)
 	options = options or {}
+	local kind = tostring(options.Type or options.Kind or "Info")
+	local accent = self:_notificationColors(kind)
+
 	local item = new("Frame", {
 		Name = "Notification",
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
-		Parent = self.NotificationList
+		Parent = self.NotificationList,
+		ZIndex = 60
 	}, {
-		corner(10),
-		padding(12, 12, 10, 10),
-		listLayout(Enum.FillDirection.Vertical, 4)
+		corner(8),
+		padding(14, 14, 12, 12),
+		listLayout(Enum.FillDirection.Vertical, 6)
 	})
-	self:_track(item, {BackgroundColor3 = "Panel", BorderColor3 = "Panel"})
-	local itemStroke = stroke(getThemeValue(self, "StrokeSoft"), 1, 0)
-	itemStroke.Parent = item
-	self:_track(itemStroke, {Color = "StrokeSoft"})
+	self:_track(item, {BackgroundColor3 = "Panel"})
 
-	local accentBar = new("Frame", {
-		Name = "Accent",
+	local itemStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
+	itemStroke.Parent = item
+	itemStroke.ZIndex = 61
+	self:_track(itemStroke, {Color = "Stroke"})
+
+	local topLine = new("Frame", {
+		Name = "StatusLine",
 		AnchorPoint = Vector2.new(0, 0),
 		Position = UDim2.new(0, 0, 0, 0),
-		Size = UDim2.new(0, 3, 1, 0),
+		Size = UDim2.new(1, 0, 0, 3),
 		BorderSizePixel = 0,
-		BackgroundColor3 = self:_notificationColors(options.Type),
-		Parent = item
-	}, {corner(10)})
+		BackgroundColor3 = accent,
+		BackgroundTransparency = 1,
+		Parent = item,
+		ZIndex = 62
+	})
+
+	local header = new("Frame", {
+		Name = "Header",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 20),
+		Parent = item,
+		ZIndex = 63
+	})
+
+	local dot = new("Frame", {
+		Name = "StatusDot",
+		Position = UDim2.fromOffset(0, 6),
+		Size = UDim2.fromOffset(8, 8),
+		BorderSizePixel = 0,
+		BackgroundColor3 = accent,
+		BackgroundTransparency = 1,
+		Parent = header,
+		ZIndex = 64
+	}, {corner(4)})
 
 	local title = new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, 18),
+		Position = UDim2.fromOffset(16, 0),
+		Size = UDim2.new(1, -16, 0, 20),
 		Font = Enum.Font.GothamMedium,
 		TextSize = 14,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Text = tostring(options.Title or "Notification"),
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Parent = item
+		Parent = header,
+		ZIndex = 64
 	})
 	self:_track(title, {TextColor3 = "Text"})
 
 	local content = new("TextLabel", {
 		Name = "Content",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -8, 0, 0),
+		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Font = Enum.Font.Gotham,
 		TextSize = 13,
@@ -661,33 +679,39 @@ function Window:Notify(options)
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = tostring(options.Content or ""),
-		Parent = item
+		Parent = item,
+		ZIndex = 64
 	})
 	self:_track(content, {TextColor3 = "TextMuted"})
 
-	item.BackgroundTransparency = 1
 	itemStroke.Transparency = 1
 	title.TextTransparency = 1
 	content.TextTransparency = 1
-	accentBar.BackgroundTransparency = 1
+	dot.BackgroundTransparency = 1
+	topLine.BackgroundTransparency = 1
+
 	task.defer(function()
-		tween(item, 0.2, {BackgroundTransparency = 0})
-		tween(itemStroke, 0.2, {Transparency = 0})
-		tween(title, 0.2, {TextTransparency = 0})
-		tween(content, 0.2, {TextTransparency = 0})
-		tween(accentBar, 0.2, {BackgroundTransparency = 0})
+		if not item or not item.Parent then return end
+		tween(item, 0.18, {BackgroundTransparency = 0})
+		tween(itemStroke, 0.18, {Transparency = 0})
+		tween(title, 0.18, {TextTransparency = 0})
+		tween(content, 0.18, {TextTransparency = 0})
+		tween(dot, 0.18, {BackgroundTransparency = 0})
+		tween(topLine, 0.18, {BackgroundTransparency = 0})
 	end)
+
 	local duration = tonumber(options.Duration) or 4
 	task.delay(duration, function()
 		if not item or not item.Parent then
 			return
 		end
-		tween(item, 0.18, {BackgroundTransparency = 1})
-		tween(itemStroke, 0.18, {Transparency = 1})
-		tween(title, 0.18, {TextTransparency = 1})
-		tween(content, 0.18, {TextTransparency = 1})
-		tween(accentBar, 0.18, {BackgroundTransparency = 1})
-		task.wait(0.2)
+		tween(item, 0.16, {BackgroundTransparency = 1})
+		tween(itemStroke, 0.16, {Transparency = 1})
+		tween(title, 0.16, {TextTransparency = 1})
+		tween(content, 0.16, {TextTransparency = 1})
+		tween(dot, 0.16, {BackgroundTransparency = 1})
+		tween(topLine, 0.16, {BackgroundTransparency = 1})
+		task.wait(0.18)
 		if item then
 			item:Destroy()
 		end
@@ -1120,7 +1144,7 @@ function Tab:CreateToggle(options)
 		BorderSizePixel = 0,
 		Parent = button
 	}, {corner(10)})
-	self.Window:_track(knob, {BackgroundColor3 = "Text"})
+	self.Window:_track(knob, {BackgroundColor3 = "ControlKnob"})
 
 	local controller = {Type = "Toggle", Flag = options.Flag}
 	local function render()
@@ -1573,7 +1597,7 @@ end
 function Tab:CreateColorPicker(options)
 	options = options or {}
 	local name = tostring(options.Name or "Color Picker")
-	local value = tableToColor(options.Color or options.CurrentColor, Color3.fromRGB(88, 142, 255))
+	local value = tableToColor(options.Color or options.CurrentColor, getThemeValue(self.Window, "Accent"))
 	local frame = self.Window:_createElement(self, name, name .. " color picker rgb", 96)
 	self:_headerRow(frame, name, options.Description)
 	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), Parent = frame})
@@ -1617,14 +1641,14 @@ function Tab:CreateColorPicker(options)
 	}, {listLayout(Enum.FillDirection.Horizontal, 6)})
 	local controller = {Type = "ColorPicker", Flag = options.Flag}
 	local presetColors = options.Presets or {
-		Color3.fromRGB(88, 142, 255),
-		Color3.fromRGB(55, 179, 113),
-		Color3.fromRGB(236, 174, 61),
-		Color3.fromRGB(230, 83, 83),
-		Color3.fromRGB(155, 109, 255),
-		Color3.fromRGB(231, 132, 78),
-		Color3.fromRGB(240, 240, 240),
-		Color3.fromRGB(24, 26, 31)
+		Color3.fromRGB(82, 121, 107),
+		Color3.fromRGB(72, 112, 129),
+		Color3.fromRGB(130, 94, 63),
+		Color3.fromRGB(76, 142, 99),
+		Color3.fromRGB(166, 121, 54),
+		Color3.fromRGB(174, 66, 60),
+		Color3.fromRGB(232, 228, 219),
+		Color3.fromRGB(84, 91, 88)
 	}
 	local function render()
 		preview.BackgroundColor3 = value
@@ -1675,9 +1699,9 @@ function Anchorline:CreateWindow(options)
 	local self = setmetatable({}, Window)
 	self.Title = tostring(options.Title or options.Name or "Anchorline")
 	self.Subtitle = tostring(options.Subtitle or options.LoadingSubtitle or "Reusable interface library")
-	self.Width = tonumber(options.Width) or 700
-	self.Height = tonumber(options.Height) or 480
-	self.SidebarWidth = tonumber(options.SidebarWidth) or 164
+	self.Width = tonumber(options.Width) or 760
+	self.Height = tonumber(options.Height) or 500
+	self.SidebarWidth = tonumber(options.SidebarWidth) or 188
 	self.SidebarCollapsed = false
 	self.Hidden = false
 	self.Minimized = false
@@ -1689,8 +1713,8 @@ function Anchorline:CreateWindow(options)
 	if self.Configuration.Enabled == nil then
 		self.Configuration.Enabled = false
 	end
-	self.ThemeName = "Foundry"
-	self.Theme = Anchorline.Themes.Foundry
+	self.ThemeName = "Workbench"
+	self.Theme = Anchorline.Themes.Workbench
 
 	local parent = options.Parent or resolveParent()
 	local guiName = "Anchorline_" .. HttpService:GenerateGUID(false):gsub("-", "")
@@ -1935,7 +1959,7 @@ function Anchorline:CreateWindow(options)
 	closeButton.MouseButton1Click:Connect(function()
 		self:Prompt({
 			Title = "Close interface",
-			Content = "This will destroy the current Anchorline window.",
+			Content = "This will destroy the current Anchorline window and its controls.",
 			ConfirmText = "Close",
 			CancelText = "Keep open",
 			Callback = function(confirmed)
@@ -1962,7 +1986,7 @@ function Anchorline:CreateWindow(options)
 		end
 	end)
 
-	self:SetTheme(options.Theme or "Foundry")
+	self:SetTheme(options.Theme or "Workbench")
 	Anchorline.Windows[#Anchorline.Windows + 1] = self
 	Anchorline.LastWindow = self
 
