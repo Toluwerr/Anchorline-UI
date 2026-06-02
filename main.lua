@@ -1,15 +1,15 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.4.0"
+Anchorline.Version = "2.5.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
 Anchorline.Motion = {
-	Micro = 0.16,
-	Fast = 0.24,
-	Base = 0.34,
-	Panel = 0.46,
-	Exit = 0.28
+	Micro = 0.18,
+	Fast = 0.28,
+	Base = 0.4,
+	Panel = 0.54,
+	Exit = 0.34
 }
 
 local Players = game:GetService("Players")
@@ -20,6 +20,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -240,6 +241,20 @@ local function resolveParent()
 		return gui
 	end
 	return CoreGui
+end
+
+local function getViewportSize()
+	local camera = Workspace.CurrentCamera
+	if camera and typeof(camera.ViewportSize) == "Vector2" then
+		return camera.ViewportSize
+	end
+	return Vector2.new(1280, 720)
+end
+
+local function clampVectorSize(width, height, minWidth, minHeight, maxWidth, maxHeight)
+	local safeMaxWidth = math.max(minWidth, maxWidth)
+	local safeMaxHeight = math.max(minHeight, maxHeight)
+	return math.clamp(width, minWidth, safeMaxWidth), math.clamp(height, minHeight, safeMaxHeight)
 end
 
 Anchorline.Themes = {
@@ -609,6 +624,7 @@ function Window:_selectTab(tab)
 		self:_styleTabButton(candidate)
 	end
 	self:_applySearch()
+	self:_queueSmartResize()
 end
 
 function Window:_updateContentOffset()
@@ -618,6 +634,106 @@ function Window:_updateContentOffset()
 	for _, tab in ipairs(self.Tabs) do
 		tab.ButtonTitle.Visible = not self.SidebarCollapsed
 	end
+	self:_queueSmartResize()
+end
+
+function Window:_refreshAdaptiveLayouts()
+	if type(self._adaptiveHandlers) ~= "table" then
+		return
+	end
+	for i = #self._adaptiveHandlers, 1, -1 do
+		local handler = self._adaptiveHandlers[i]
+		if type(handler) ~= "function" then
+			table.remove(self._adaptiveHandlers, i)
+		else
+			local ok = pcall(handler)
+			if not ok then
+				table.remove(self._adaptiveHandlers, i)
+			end
+		end
+	end
+end
+
+function Window:_addAdaptiveHandler(handler)
+	if type(handler) ~= "function" then
+		return
+	end
+	self._adaptiveHandlers[#self._adaptiveHandlers + 1] = handler
+	task.defer(function()
+		if self.Root and self.Root.Parent then
+			self:_refreshAdaptiveLayouts()
+			self:_queueSmartResize()
+		end
+	end)
+end
+
+function Window:_measureActiveContent()
+	local active = self.ActiveTab
+	local minimumContentWidth = self.SmartContentMinWidth or 390
+	local contentHeight = 160
+	if active and active.Page then
+		local layout = active.Page:FindFirstChildOfClass("UIListLayout")
+		if layout then
+			contentHeight = 66 + layout.AbsoluteContentSize.Y + 34
+		end
+		for _, element in ipairs(active.Elements or {}) do
+			if element and element.Parent then
+				local elementWidth = tonumber(element:GetAttribute("AnchorlineMinWidth")) or 0
+				if elementWidth > minimumContentWidth then
+					minimumContentWidth = elementWidth
+				end
+			end
+		end
+	end
+	return minimumContentWidth, contentHeight
+end
+
+function Window:_calculateSmartSize()
+	local viewport = getViewportSize()
+	local margin = tonumber(self.SmartViewportMargin) or 44
+	local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, math.max(520, viewport.X - margin))
+	local maxHeight = math.min(tonumber(self.MaxHeight) or 760, math.max(360, viewport.Y - margin))
+	local minWidth = tonumber(self.MinWidth) or 560
+	local minHeight = tonumber(self.MinHeight) or 390
+	local contentMinWidth, contentHeight = self:_measureActiveContent()
+	local sidebarWidth = self.SidebarCollapsed and 64 or self.SidebarWidth
+	local desiredWidth = math.max(tonumber(self.Width) or minWidth, sidebarWidth + contentMinWidth + 54)
+	local desiredHeight = math.max(tonumber(self.Height) or minHeight, 58 + math.min(contentHeight, maxHeight - 58))
+	return clampVectorSize(desiredWidth, desiredHeight, minWidth, minHeight, maxWidth, maxHeight)
+end
+
+function Window:SmartResize(animated)
+	if not self.SmartResizeEnabled or not self.Root or self.Root.Parent == nil or self.Minimized then
+		return self
+	end
+	self:_refreshAdaptiveLayouts()
+	local targetWidth, targetHeight = self:_calculateSmartSize()
+	self._computedMinWidth = targetWidth
+	self._computedMinHeight = math.min(targetHeight, tonumber(self.MaxHeight) or targetHeight)
+	local targetSize = UDim2.fromOffset(targetWidth, targetHeight)
+	local currentSize = self.Root.AbsoluteSize
+	if math.abs(currentSize.X - targetWidth) < 1 and math.abs(currentSize.Y - targetHeight) < 1 then
+		return self
+	end
+	if animated then
+		tween(self.Root, Anchorline.Motion.Panel, {Size = targetSize}, Enum.EasingStyle.Quint)
+	else
+		self.Root.Size = targetSize
+	end
+	return self
+end
+
+function Window:_queueSmartResize()
+	if not self.SmartResizeEnabled or self._smartResizeQueued then
+		return
+	end
+	self._smartResizeQueued = true
+	task.delay(0.05, function()
+		self._smartResizeQueued = false
+		if self.Root and self.Root.Parent then
+			self:SmartResize(true)
+		end
+	end)
 end
 
 function Window:CollapseSidebar(value)
@@ -775,10 +891,15 @@ function Window:_makeResizable()
 	local resizing = false
 	local resizeStart = nil
 	local startSize = nil
-	local minWidth = 520
-	local minHeight = 360
-	local maxWidth = 980
-	local maxHeight = 740
+	local function bounds()
+		local viewport = getViewportSize()
+		local margin = tonumber(self.SmartViewportMargin) or 44
+		local minWidth = math.max(tonumber(self.MinWidth) or 560, tonumber(self._computedMinWidth) or 0)
+		local minHeight = math.max(tonumber(self.MinHeight) or 390, math.min(tonumber(self._computedMinHeight) or 0, tonumber(self.MaxHeight) or 760))
+		local maxWidth = math.min(tonumber(self.MaxWidth) or 1040, math.max(minWidth, viewport.X - margin))
+		local maxHeight = math.min(tonumber(self.MaxHeight) or 760, math.max(minHeight, viewport.Y - margin))
+		return minWidth, minHeight, maxWidth, maxHeight
+	end
 
 	self._connections[#self._connections + 1] = self.ResizeHandle.InputBegan:Connect(function(input)
 		if self.Minimized then
@@ -804,9 +925,11 @@ function Window:_makeResizable()
 			return
 		end
 		local delta = input.Position - resizeStart
+		local minWidth, minHeight, maxWidth, maxHeight = bounds()
 		local newWidth = math.clamp(startSize.X + delta.X, minWidth, maxWidth)
 		local newHeight = math.clamp(startSize.Y + delta.Y, minHeight, maxHeight)
 		self.Root.Size = UDim2.fromOffset(newWidth, newHeight)
+		self:_refreshAdaptiveLayouts()
 	end)
 end
 
@@ -1152,6 +1275,7 @@ function Window:_applySearch()
 			object.Visible = query == "" or string.find(searchText, query, 1, true) ~= nil
 		end
 	end
+	self:_queueSmartResize()
 end
 
 function Window:CreateTab(name, icon, description)
@@ -1273,10 +1397,10 @@ end
 function Window:_createElement(tab, titleText, searchText, height)
 	local frame = new("Frame", {
 		Name = tostring(titleText or "Element"),
-		Size = UDim2.new(1, -32, 0, height or 54),
+		Size = UDim2.new(1, 0, 0, height or 54),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = self.FrostedGlass and 0.14 or 0,
-		ClipsDescendants = false,
+		ClipsDescendants = true,
 		Parent = tab.Page
 	}, {
 		corner(12),
@@ -1284,11 +1408,19 @@ function Window:_createElement(tab, titleText, searchText, height)
 		listLayout(Enum.FillDirection.Vertical, 8)
 	})
 	frame:SetAttribute("SearchText", tostring(searchText or titleText or ""))
+	frame:SetAttribute("AnchorlineMinWidth", 320)
 	local s = stroke(getThemeValue(self, "StrokeSoft"), 1, 0)
 	s.Parent = frame
 	self:_track(frame, {BackgroundColor3 = "PanelAlt"})
 	self:_track(s, {Color = "StrokeSoft"})
 	tab.Elements[#tab.Elements + 1] = frame
+	local elementLayout = frame:FindFirstChildOfClass("UIListLayout")
+	if elementLayout then
+		self._connections[#self._connections + 1] = elementLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			self:_queueSmartResize()
+		end)
+	end
+	self:_queueSmartResize()
 	return frame
 end
 
@@ -1332,7 +1464,7 @@ end
 function Tab:CreateSection(name)
 	local frame = new("Frame", {
 		Name = tostring(name or "Section"),
-		Size = UDim2.new(1, -32, 0, 28),
+		Size = UDim2.new(1, 0, 0, 28),
 		BackgroundTransparency = 1,
 		Parent = self.Page
 	})
@@ -1355,7 +1487,7 @@ end
 function Tab:CreateDivider()
 	local frame = new("Frame", {
 		Name = "Divider",
-		Size = UDim2.new(1, -32, 0, 10),
+		Size = UDim2.new(1, 0, 0, 10),
 		BackgroundTransparency = 1,
 		Parent = self.Page
 	})
@@ -1463,6 +1595,7 @@ end
 
 function Tab:CreateToggle(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Toggle")
 	local value = options.CurrentValue and true or false
 	local frame = self.Window:_createElement(self, name, name .. " " .. tostring(options.Description or "toggle"), 62)
@@ -1506,7 +1639,7 @@ function Tab:CreateToggle(options)
 		render(not loading)
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -1539,6 +1672,7 @@ end
 
 function Tab:CreateSlider(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Slider")
 	local range = options.Range or {0, 100}
 	local minValue = tonumber(range[1]) or 0
@@ -1613,7 +1747,7 @@ function Tab:CreateSlider(options)
 		render(not loading)
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -1642,6 +1776,7 @@ end
 
 function Tab:CreateInput(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Input")
 	local value = tostring(options.CurrentValue or "")
 	local frame = self.Window:_createElement(self, name, name .. " " .. tostring(options.PlaceholderText or options.Placeholder or "input"), 82)
@@ -1664,7 +1799,7 @@ function Tab:CreateInput(options)
 		box.Text = value
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -1694,6 +1829,7 @@ end
 
 function Tab:CreateDropdown(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Dropdown")
 	local multiple = options.Multiple or options.MultiSelect or false
 	local optionsList = options.Options or {}
@@ -1801,10 +1937,12 @@ function Tab:CreateDropdown(options)
 					open = false
 					list.Visible = false
 					arrow.Text = "v"
+					tween(arrow, 0.2, {Rotation = 0}, Enum.EasingStyle.Quint)
+					window:_queueSmartResize()
 				end
 				renderText()
 				safeCall(options.Callback, controller:Get())
-				self.Window:_autoSave()
+				window:_autoSave()
 			end)
 			optionButtons[#optionButtons + 1] = optionButton
 		end
@@ -1831,7 +1969,7 @@ function Tab:CreateDropdown(options)
 		renderText()
 		if not loading then
 			safeCall(options.Callback, controller:Get())
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -1852,6 +1990,8 @@ function Tab:CreateDropdown(options)
 		open = not open
 		list.Visible = open
 		arrow.Text = open and "^" or "v"
+		tween(arrow, 0.22, {Rotation = open and 180 or 0}, Enum.EasingStyle.Quint)
+		window:_queueSmartResize()
 	end)
 	renderButtons()
 	renderText()
@@ -1861,6 +2001,7 @@ end
 
 function Tab:CreateKeybind(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Keybind")
 	local current = normalizeKey(options.CurrentKeybind or options.Keybind or Enum.KeyCode.RightControl)
 	local listening = false
@@ -1884,7 +2025,7 @@ function Tab:CreateKeybind(options)
 		button.Text = current.Name
 		if not loading then
 			safeCall(options.ChangedCallback, current)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -1928,6 +2069,7 @@ end
 
 function Tab:CreateProgress(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Progress")
 	local range = options.Range or {0, 100}
 	local minValue = tonumber(range[1]) or 0
@@ -1968,28 +2110,42 @@ end
 
 function Tab:CreateColorPicker(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Color Picker")
 	local value = tableToColor(options.Color or options.CurrentColor, getThemeValue(self.Window, "Accent"))
-	local frame = self.Window:_createElement(self, name, name .. " color picker rgb", 96)
+	local frame = self.Window:_createElement(self, name, name .. " color picker rgb presets", 112)
+	frame:SetAttribute("AnchorlineAdaptive", "ColorPicker")
+	frame:SetAttribute("AnchorlineMinWidth", 420)
 	self:_headerRow(frame, name, options.Description)
-	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), Parent = frame})
+
+	local rgbRow = new("Frame", {
+		Name = "RGBRow",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 34),
+		Parent = frame
+	})
+
 	local preview = new("TextButton", {
-		Size = UDim2.fromOffset(44, 30),
+		Name = "Preview",
+		Size = UDim2.fromOffset(54, 32),
 		Text = "",
 		AutoButtonColor = false,
-		Parent = row
-	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		Parent = rgbRow
+	}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+
 	local fields = new("Frame", {
+		Name = "RGBFields",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(54, 0),
-		Size = UDim2.new(1, -54, 0, 30),
-		Parent = row
-	}, {listLayout(Enum.FillDirection.Horizontal, 6)})
+		Position = UDim2.fromOffset(66, 0),
+		Size = UDim2.new(1, -66, 0, 32),
+		Parent = rgbRow
+	}, {listLayout(Enum.FillDirection.Horizontal, 8)})
+
 	local boxes = {}
 	local function makeBox(labelText)
 		local box = new("TextBox", {
-			Size = UDim2.new(0.333, -4, 1, 0),
-			BackgroundTransparency = 0,
+			Size = UDim2.new(1 / 3, -6, 1, 0),
+			BackgroundTransparency = self.Window.FrostedGlass and 0.16 or 0,
 			Text = "0",
 			PlaceholderText = labelText,
 			ClearTextOnFocus = false,
@@ -1997,7 +2153,7 @@ function Tab:CreateColorPicker(options)
 			TextSize = 12,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Parent = fields
-		}, {corner(4), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 		self.Window:_track(box, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
 		boxes[labelText] = box
 		return box
@@ -2005,12 +2161,23 @@ function Tab:CreateColorPicker(options)
 	makeBox("R")
 	makeBox("G")
 	makeBox("B")
+
 	local presets = new("Frame", {
 		Name = "Presets",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 24),
+		Size = UDim2.new(1, 0, 0, 32),
 		Parent = frame
-	}, {listLayout(Enum.FillDirection.Horizontal, 6)})
+	})
+	local presetGrid = new("UIGridLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Left,
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		CellPadding = UDim2.fromOffset(8, 8),
+		CellSize = UDim2.fromOffset(32, 32)
+	})
+	presetGrid.Parent = presets
+
 	local controller = {Type = "ColorPicker", Flag = options.Flag}
 	local presetColors = options.Presets or {
 		Color3.fromRGB(82, 121, 107),
@@ -2022,6 +2189,32 @@ function Tab:CreateColorPicker(options)
 		Color3.fromRGB(232, 228, 219),
 		Color3.fromRGB(84, 91, 88)
 	}
+
+	local function relayout()
+		if not frame or not frame.Parent then
+			return
+		end
+		local width = math.max(frame.AbsoluteSize.X - 28, 240)
+		local compact = width < 390
+		local chipSize = compact and 30 or 32
+		local gap = compact and 7 or 8
+		local columns = math.max(1, math.floor((width + gap) / (chipSize + gap)))
+		presetGrid.CellPadding = UDim2.fromOffset(gap, gap)
+		presetGrid.CellSize = UDim2.fromOffset(chipSize, chipSize)
+		presetGrid.FillDirectionMaxCells = columns
+		local rows = math.max(1, math.ceil(#presetColors / columns))
+		presets.Size = UDim2.new(1, 0, 0, rows * chipSize + math.max(rows - 1, 0) * gap)
+		if compact then
+			preview.Size = UDim2.fromOffset(48, 32)
+			fields.Position = UDim2.fromOffset(58, 0)
+			fields.Size = UDim2.new(1, -58, 0, 32)
+		else
+			preview.Size = UDim2.fromOffset(54, 32)
+			fields.Position = UDim2.fromOffset(66, 0)
+			fields.Size = UDim2.new(1, -66, 0, 32)
+		end
+	end
+
 	local function render()
 		preview.BackgroundColor3 = value
 		local packed = colorToTable(value)
@@ -2029,17 +2222,19 @@ function Tab:CreateColorPicker(options)
 		boxes.G.Text = tostring(packed.G)
 		boxes.B.Text = tostring(packed.B)
 	end
+
 	function controller:Set(newValue, loading)
 		value = tableToColor(newValue, value)
 		render()
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
 		return value
 	end
+
 	local function updateFromBoxes()
 		local r = tonumber(boxes.R.Text) or 0
 		local g = tonumber(boxes.G.Text) or 0
@@ -2049,19 +2244,35 @@ function Tab:CreateColorPicker(options)
 	for _, box in pairs(boxes) do
 		box.FocusLost:Connect(updateFromBoxes)
 	end
-	for _, color in ipairs(presetColors) do
+	for index, color in ipairs(presetColors) do
 		local chip = new("TextButton", {
-			Size = UDim2.fromOffset(24, 24),
+			Name = "Preset" .. tostring(index),
 			BackgroundColor3 = color,
 			Text = "",
 			AutoButtonColor = false,
 			Parent = presets
-		}, {corner(6), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		chip.MouseEnter:Connect(function()
+			tween(chip, 0.18, {BackgroundTransparency = 0.04}, Enum.EasingStyle.Quint)
+		end)
+		chip.MouseLeave:Connect(function()
+			tween(chip, 0.2, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+		end)
 		chip.MouseButton1Click:Connect(function()
 			controller:Set(color)
 		end)
 	end
+
+	self.Window:_addAdaptiveHandler(relayout)
+	self.Window._connections[#self.Window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		relayout()
+	end)
+	self.Window._connections[#self.Window._connections + 1] = presetGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		presets.Size = UDim2.new(1, 0, 0, math.max(32, presetGrid.AbsoluteContentSize.Y))
+		self.Window:_queueSmartResize()
+	end)
 	render()
+	relayout()
 	self.Window:_registerFlag(options.Flag, controller)
 	return controller
 end
@@ -2144,8 +2355,183 @@ function Tab:CreateBadge(options)
 	return controller
 end
 
+function Tab:CreateStatCard(options)
+	options = options or {}
+	local window = self.Window
+	local name = tostring(options.Name or options.Title or "Statistic")
+	local value = tostring(options.Value or "0")
+	local caption = tostring(options.Caption or options.Description or "")
+	local frame = self.Window:_createElement(self, name, name .. " " .. value .. " stat metric", 92)
+	frame:SetAttribute("AnchorlineMinWidth", 360)
+	local top = new("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 28),
+		Parent = frame
+	})
+	local title = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -110, 1, 0),
+		Font = Enum.Font.GothamMedium,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = name,
+		Parent = top
+	})
+	self.Window:_track(title, {TextColor3 = "TextMuted"})
+	local badgeText = tostring(options.Badge or options.Status or "")
+	local badge = new("TextLabel", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.fromOffset(96, 24),
+		BackgroundTransparency = self.Window.FrostedGlass and 0.12 or 0,
+		Font = Enum.Font.GothamMedium,
+		TextSize = 11,
+		Text = badgeText,
+		Visible = badgeText ~= "",
+		Parent = top
+	}, {corner(8), padding(8, 8, 0, 0), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+	self.Window:_track(badge, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+	local valueLabel = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 30),
+		Font = Enum.Font.GothamBold,
+		TextSize = 22,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = value,
+		Parent = frame
+	})
+	self.Window:_track(valueLabel, {TextColor3 = "Text"})
+	local captionLabel = new("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = caption,
+		Parent = frame
+	})
+	self.Window:_track(captionLabel, {TextColor3 = "TextMuted"})
+	local controller = {Type = "StatCard"}
+	function controller:Set(newValue, newCaption)
+		value = tostring(newValue or "")
+		valueLabel.Text = value
+		if newCaption ~= nil then
+			caption = tostring(newCaption or "")
+			captionLabel.Text = caption
+		end
+		frame:SetAttribute("SearchText", name .. " " .. value .. " " .. caption)
+		window:_queueSmartResize()
+	end
+	function controller:SetBadge(newBadge)
+		badgeText = tostring(newBadge or "")
+		badge.Text = badgeText
+		badge.Visible = badgeText ~= ""
+	end
+	function controller:Get()
+		return value
+	end
+	return controller
+end
+
+function Tab:CreateActionGrid(options)
+	options = options or {}
+	local window = self.Window
+	local name = tostring(options.Name or options.Title or "Actions")
+	local actions = options.Actions or options.Buttons or {}
+	local frame = self.Window:_createElement(self, name, name .. " action buttons grid", 88)
+	frame:SetAttribute("AnchorlineAdaptive", "ActionGrid")
+	frame:SetAttribute("AnchorlineMinWidth", 380)
+	self:_headerRow(frame, name, options.Description)
+	local gridHolder = new("Frame", {
+		Name = "ActionGrid",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 36),
+		Parent = frame
+	})
+	local grid = new("UIGridLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Left,
+		VerticalAlignment = Enum.VerticalAlignment.Top,
+		CellPadding = UDim2.fromOffset(8, 8),
+		CellSize = UDim2.fromOffset(128, 34)
+	})
+	grid.Parent = gridHolder
+	local buttons = {}
+	local function makeAction(action, index)
+		local label = tostring(action.Name or action.Title or action.Text or ("Action " .. tostring(index)))
+		local button = new("TextButton", {
+			Name = "Action" .. tostring(index),
+			Text = label,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 12,
+			AutoButtonColor = false,
+			Parent = gridHolder
+		}, {corner(8), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
+		self.Window:_track(button, {BackgroundColor3 = "Surface", TextColor3 = "Text"})
+		button.MouseEnter:Connect(function()
+			tween(button, 0.18, {BackgroundColor3 = getThemeValue(self.Window, "SurfaceHover")}, Enum.EasingStyle.Quint)
+		end)
+		button.MouseLeave:Connect(function()
+			tween(button, 0.22, {BackgroundColor3 = getThemeValue(self.Window, "Surface")}, Enum.EasingStyle.Quint)
+		end)
+		button.MouseButton1Click:Connect(function()
+			tween(button, 0.1, {BackgroundTransparency = 0.08}, Enum.EasingStyle.Quint)
+			task.delay(0.12, function()
+				if button and button.Parent then
+					tween(button, 0.16, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
+				end
+			end)
+			safeCall(action.Callback, label, index)
+		end)
+		buttons[#buttons + 1] = button
+	end
+	for index, action in ipairs(actions) do
+		if type(action) == "table" then
+			makeAction(action, index)
+		else
+			makeAction({Name = tostring(action)}, index)
+		end
+	end
+	local function relayout()
+		if not frame or not frame.Parent then return end
+		local width = math.max(frame.AbsoluteSize.X - 28, 240)
+		local minCell = tonumber(options.MinButtonWidth) or 118
+		local gap = 8
+		local columns = math.max(1, math.floor((width + gap) / (minCell + gap)))
+		local cellWidth = math.floor((width - gap * math.max(columns - 1, 0)) / columns)
+		grid.CellPadding = UDim2.fromOffset(gap, gap)
+		grid.CellSize = UDim2.fromOffset(math.max(minCell, cellWidth), 34)
+		grid.FillDirectionMaxCells = columns
+		local rows = math.max(1, math.ceil(math.max(#buttons, 1) / columns))
+		gridHolder.Size = UDim2.new(1, 0, 0, rows * 34 + math.max(rows - 1, 0) * gap)
+	end
+	self.Window:_addAdaptiveHandler(relayout)
+	self.Window._connections[#self.Window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	relayout()
+	local controller = {Type = "ActionGrid"}
+	function controller:Refresh(newActions)
+		for _, button in ipairs(buttons) do
+			if button then button:Destroy() end
+		end
+		buttons = {}
+		actions = newActions or {}
+		for index, action in ipairs(actions) do
+			if type(action) == "table" then makeAction(action, index) else makeAction({Name = tostring(action)}, index) end
+		end
+		relayout()
+		window:_queueSmartResize()
+	end
+	return controller
+end
+
 function Tab:CreateSegmentedControl(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Segmented Control")
 	local choices = options.Options or {"One", "Two"}
 	local selected = tostring(options.CurrentOption or options.CurrentValue or choices[1] or "")
@@ -2189,7 +2575,7 @@ function Tab:CreateSegmentedControl(options)
 		render(not loading)
 		if not loading then
 			safeCall(options.Callback, selected)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -2202,6 +2588,7 @@ end
 
 function Tab:CreateStepper(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Stepper")
 	local range = options.Range or {0, 10}
 	local minValue = tonumber(range[1]) or 0
@@ -2249,7 +2636,7 @@ function Tab:CreateStepper(options)
 		render()
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -2264,6 +2651,7 @@ end
 
 function Tab:CreateTextArea(options)
 	options = options or {}
+	local window = self.Window
 	local name = tostring(options.Name or "Text Area")
 	local value = tostring(options.CurrentValue or "")
 	local height = tonumber(options.Height) or 126
@@ -2290,7 +2678,7 @@ function Tab:CreateTextArea(options)
 		box.Text = value
 		if not loading then
 			safeCall(options.Callback, value)
-			self.Window:_autoSave()
+			window:_autoSave()
 		end
 	end
 	function controller:Get()
@@ -2307,7 +2695,7 @@ end
 function Tab:CreateSpacer(height)
 	local frame = new("Frame", {
 		Name = "Spacer",
-		Size = UDim2.new(1, -32, 0, tonumber(height) or 8),
+		Size = UDim2.new(1, 0, 0, tonumber(height) or 8),
 		BackgroundTransparency = 1,
 		Parent = self.Page
 	})
@@ -2327,6 +2715,13 @@ function Anchorline:CreateWindow(options)
 	self.Width = tonumber(options.Width) or 780
 	self.Height = tonumber(options.Height) or 520
 	self.SidebarWidth = tonumber(options.SidebarWidth) or 188
+	self.SmartResizeEnabled = options.SmartResize ~= false
+	self.SmartViewportMargin = tonumber(options.SmartViewportMargin) or 44
+	self.SmartContentMinWidth = tonumber(options.SmartContentMinWidth) or 390
+	self.MinWidth = tonumber(options.MinWidth) or 560
+	self.MinHeight = tonumber(options.MinHeight) or 390
+	self.MaxWidth = tonumber(options.MaxWidth) or 1040
+	self.MaxHeight = tonumber(options.MaxHeight) or 760
 	self.SidebarCollapsed = false
 	self.Hidden = false
 	self.Minimized = false
@@ -2334,6 +2729,7 @@ function Anchorline:CreateWindow(options)
 	self.Flags = {}
 	self._themed = {}
 	self._connections = {}
+	self._adaptiveHandlers = {}
 	self.Configuration = options.Configuration or options.ConfigurationSaving or {Enabled = false}
 	if self.Configuration.Enabled == nil then
 		self.Configuration.Enabled = false
@@ -2633,6 +3029,12 @@ function Anchorline:CreateWindow(options)
 			self:LoadConfiguration()
 		end)
 	end
+
+	task.defer(function()
+		if self.Root and self.Root.Parent then
+			self:SmartResize(false)
+		end
+	end)
 
 	return self
 end
