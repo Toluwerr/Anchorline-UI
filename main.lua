@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.1.0"
+Anchorline.Version = "3.2.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.Motion = {
@@ -4712,6 +4712,594 @@ function Anchorline:SetTheme(name, theme)
 		Anchorline.Themes[name] = theme
 	end
 	return Anchorline
+end
+
+
+
+-- Anchorline compatibility and hardening layer
+-- This layer keeps Anchorline's native API intact while accepting common patterns from Rayfield-style,
+-- Kavo-style, Orion-style, and basic custom UI scripts. It avoids emoji aliases and keeps all icons
+-- resolved through clean vector names, Roblox asset IDs, or a Lucide provider when available.
+
+local function anchorlineTrim(value)
+	return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function anchorlineNormalizeType(value)
+	local cleaned = anchorlineTrim(value):lower()
+	cleaned = cleaned:gsub("[%s_]+", "-"):gsub("[^%w%-]", "")
+	cleaned = cleaned:gsub("%-+", "-"):gsub("^%-", ""):gsub("%-$", "")
+	return cleaned
+end
+
+local function anchorlineCopyTable(source)
+	local copy = {}
+	if type(source) == "table" then
+		for key, value in pairs(source) do
+			copy[key] = value
+		end
+	end
+	return copy
+end
+
+local function anchorlinePackOptions(a, b, c, d, e, f)
+	if type(a) == "table" then
+		return anchorlineCopyTable(a)
+	end
+	return {
+		Name = a,
+		Description = b,
+		Callback = c,
+		Value = d,
+		Extra = e,
+		Extra2 = f
+	}
+end
+
+local function anchorlineEnhanceController(controller)
+	if type(controller) ~= "table" then
+		return controller
+	end
+	if type(controller.Get) == "function" then
+		controller.GetValue = controller.GetValue or function(self)
+			return self:Get()
+		end
+		controller.Value = controller.Value or function(self)
+			return self:Get()
+		end
+	end
+	if type(controller.Set) == "function" then
+		controller.SetValue = controller.SetValue or function(self, value)
+			return self:Set(value)
+		end
+		controller.Update = controller.Update or function(self, value)
+			return self:Set(value)
+		end
+		controller.SetState = controller.SetState or function(self, value)
+			return self:Set(value)
+		end
+	end
+	if type(controller.Refresh) == "function" then
+		controller.SetOptions = controller.SetOptions or function(self, options, keepValue)
+			return self:Refresh(options, keepValue)
+		end
+		controller.UpdateOptions = controller.UpdateOptions or function(self, options, keepValue)
+			return self:Refresh(options, keepValue)
+		end
+	end
+	if type(controller.Fire) == "function" then
+		controller.Call = controller.Call or function(self, ...)
+			return self:Fire(...)
+		end
+	end
+	return controller
+end
+
+local anchorlineNativeCreateButton = Tab.CreateButton
+local anchorlineNativeCreateToggle = Tab.CreateToggle
+local anchorlineNativeCreateSlider = Tab.CreateSlider
+local anchorlineNativeCreateInput = Tab.CreateInput
+local anchorlineNativeCreateDropdown = Tab.CreateDropdown
+local anchorlineNativeCreateKeybind = Tab.CreateKeybind
+local anchorlineNativeCreateColorPicker = Tab.CreateColorPicker
+local anchorlineNativeCreateProgress = Tab.CreateProgress
+local anchorlineNativeCreateInfoBox = Tab.CreateInfoBox
+local anchorlineNativeCreateParagraph = Tab.CreateParagraph
+local anchorlineNativeCreateLabel = Tab.CreateLabel
+local anchorlineNativeCreateSection = Tab.CreateSection
+local anchorlineNativeCreateDivider = Tab.CreateDivider
+
+local function anchorlineNormalizeButtonOptions(a, b, c)
+	local options = anchorlinePackOptions(a, b, c)
+	options.Name = options.Name or options.Title or options.Text or "Button"
+	options.Description = options.Description or options.Info or options.Content
+	options.ButtonText = options.ButtonText or options.TextButton or options.ActionText or options.Label or options.ButtonName or "Run"
+	if type(options.Callback) ~= "function" and type(c) == "function" then
+		options.Callback = c
+	end
+	return options
+end
+
+function Tab:CreateButton(a, b, c)
+	return anchorlineEnhanceController(anchorlineNativeCreateButton(self, anchorlineNormalizeButtonOptions(a, b, c)))
+end
+
+local function anchorlineNormalizeToggleOptions(a, b, c, d)
+	local options = anchorlinePackOptions(a, b, c, d)
+	options.Name = options.Name or options.Title or options.Text or "Toggle"
+	options.Description = options.Description or options.Info or options.Content
+	if options.CurrentValue == nil then
+		if options.Default ~= nil then options.CurrentValue = options.Default end
+		if options.Value ~= nil then options.CurrentValue = options.Value end
+		if options.Enabled ~= nil then options.CurrentValue = options.Enabled end
+	end
+	if options.Keybind == nil then
+		options.Keybind = options.Key or options.Bind or options.CurrentKeybind
+	end
+	if type(options.Callback) ~= "function" and type(c) == "function" then
+		options.Callback = c
+	end
+	return options
+end
+
+function Tab:CreateToggle(a, b, c, d)
+	return anchorlineEnhanceController(anchorlineNativeCreateToggle(self, anchorlineNormalizeToggleOptions(a, b, c, d)))
+end
+
+local function anchorlineNormalizeSliderOptions(a, b, c, d, e, f)
+	local options = anchorlinePackOptions(a, b, f, c, d, e)
+	if type(a) == "table" then
+		options = anchorlineCopyTable(a)
+	end
+	options.Name = options.Name or options.Title or options.Text or "Slider"
+	options.Description = options.Description or options.Info or options.Content
+	if not options.Range then
+		local minValue = options.Min or options.Minimum or options.min or (type(c) == "number" and c or nil) or 0
+		local maxValue = options.Max or options.Maximum or options.max or (type(d) == "number" and d or nil) or 100
+		options.Range = {minValue, maxValue}
+	end
+	if options.CurrentValue == nil then
+		options.CurrentValue = options.Default or options.Value or options.StartValue or options.Current or (type(e) == "number" and e or nil) or options.Range[1]
+	end
+	options.Increment = tonumber(options.Increment or options.Step or options.step or options.Interval) or 1
+	options.Suffix = options.Suffix or options.Unit or ""
+	if type(options.Callback) ~= "function" then
+		if type(b) == "function" then options.Callback = b end
+		if type(e) == "function" then options.Callback = e end
+		if type(f) == "function" then options.Callback = f end
+	end
+	return options
+end
+
+function Tab:CreateSlider(a, b, c, d, e, f)
+	return anchorlineEnhanceController(anchorlineNativeCreateSlider(self, anchorlineNormalizeSliderOptions(a, b, c, d, e, f)))
+end
+
+local function anchorlineNormalizeInputOptions(a, b, c)
+	local options = anchorlinePackOptions(a, b, c)
+	options.Name = options.Name or options.Title or options.Text or "Input"
+	options.Description = options.Description or options.Info or options.Content
+	options.PlaceholderText = options.PlaceholderText or options.Placeholder or options.DefaultText or options.Hint or "Type here"
+	if options.CurrentValue == nil then
+		options.CurrentValue = options.Default or options.Value or ""
+	end
+	if type(options.Callback) ~= "function" and type(c) == "function" then
+		options.Callback = c
+	end
+	return options
+end
+
+function Tab:CreateInput(a, b, c)
+	return anchorlineEnhanceController(anchorlineNativeCreateInput(self, anchorlineNormalizeInputOptions(a, b, c)))
+end
+
+local function anchorlineNormalizeDropdownOptions(a, b, c, d)
+	local options = anchorlinePackOptions(a, b, d)
+	if type(a) == "table" then
+		options = anchorlineCopyTable(a)
+	end
+	options.Name = options.Name or options.Title or options.Text or "Dropdown"
+	options.Description = options.Description or options.Info or options.Content
+	options.Options = options.Options or options.Values or options.Items or options.List or (type(c) == "table" and c or {})
+	if options.CurrentOption == nil then
+		options.CurrentOption = options.Default or options.Value or options.CurrentValue
+	end
+	if options.Multiple == nil then
+		options.Multiple = options.MultiSelect or options.MultipleOptions or false
+	end
+	if type(options.Callback) ~= "function" then
+		if type(c) == "function" then options.Callback = c end
+		if type(d) == "function" then options.Callback = d end
+	end
+	return options
+end
+
+function Tab:CreateDropdown(a, b, c, d)
+	return anchorlineEnhanceController(anchorlineNativeCreateDropdown(self, anchorlineNormalizeDropdownOptions(a, b, c, d)))
+end
+
+local function anchorlineNormalizeKeybindOptions(a, b, c, d)
+	local options = anchorlinePackOptions(a, b, d, c)
+	if type(a) == "table" then
+		options = anchorlineCopyTable(a)
+	end
+	options.Name = options.Name or options.Title or options.Text or "Keybind"
+	options.Description = options.Description or options.Info or options.Content
+	options.CurrentKeybind = options.CurrentKeybind or options.Keybind or options.Key or options.Bind or (typeof(c) == "EnumItem" and c or nil) or Enum.KeyCode.RightControl
+	if type(options.Callback) ~= "function" then
+		if type(c) == "function" then options.Callback = c end
+		if type(d) == "function" then options.Callback = d end
+	end
+	return options
+end
+
+function Tab:CreateKeybind(a, b, c, d)
+	return anchorlineEnhanceController(anchorlineNativeCreateKeybind(self, anchorlineNormalizeKeybindOptions(a, b, c, d)))
+end
+
+local function anchorlineNormalizeColorOptions(a, b, c)
+	local options = anchorlinePackOptions(a, b, c)
+	if type(a) == "table" then
+		options = anchorlineCopyTable(a)
+	end
+	options.Name = options.Name or options.Title or options.Text or "Color Picker"
+	options.Description = options.Description or options.Info or options.Content
+	options.Color = options.Color or options.CurrentColor or options.Default or options.Value
+	if type(options.Callback) ~= "function" and type(c) == "function" then
+		options.Callback = c
+	end
+	return options
+end
+
+function Tab:CreateColorPicker(a, b, c)
+	return anchorlineEnhanceController(anchorlineNativeCreateColorPicker(self, anchorlineNormalizeColorOptions(a, b, c)))
+end
+
+function Tab:CreateProgress(a, b, c, d, e)
+	return anchorlineEnhanceController(anchorlineNativeCreateProgress(self, anchorlineNormalizeSliderOptions(a, b, c, d, e)))
+end
+
+function Tab:CreateLabel(a)
+	if type(a) == "table" then
+		return anchorlineNativeCreateLabel(self, a.Text or a.Name or a.Title or a.Content or "Label")
+	end
+	return anchorlineNativeCreateLabel(self, a)
+end
+
+function Tab:CreateParagraph(a, b)
+	if type(a) == "table" then
+		return anchorlineNativeCreateParagraph(self, a)
+	end
+	return anchorlineNativeCreateParagraph(self, {Title = a or "Paragraph", Content = b or ""})
+end
+
+function Tab:CreateInfoBox(a, b, c)
+	if type(a) == "table" then
+		return anchorlineNativeCreateInfoBox(self, a)
+	end
+	return anchorlineNativeCreateInfoBox(self, {Title = a or "Info", Content = b or "", Type = c or "Info"})
+end
+
+function Tab:CreateSection(a)
+	if type(a) == "table" then
+		return anchorlineNativeCreateSection(self, a.Name or a.Title or a.Text or "Section")
+	end
+	return anchorlineNativeCreateSection(self, a)
+end
+
+function Tab:CreateDivider()
+	return anchorlineNativeCreateDivider(self)
+end
+
+function Tab:CreateElement(kindOrOptions, maybeOptions)
+	local kind = nil
+	local options = nil
+	if type(kindOrOptions) == "table" then
+		options = anchorlineCopyTable(kindOrOptions)
+		kind = options.Type or options.ElementType or options.Kind or options.Class or options.Control or options.Component
+	elseif type(kindOrOptions) == "string" and type(maybeOptions) == "table" then
+		kind = kindOrOptions
+		options = anchorlineCopyTable(maybeOptions)
+	elseif type(kindOrOptions) == "string" then
+		kind = kindOrOptions
+		options = {Name = kindOrOptions}
+	else
+		options = {}
+	end
+
+	if not kind or kind == "" then
+		if options.Range or options.Min or options.Max then
+			kind = "slider"
+		elseif options.Options or options.Values or options.Items then
+			kind = "dropdown"
+		elseif options.Color or options.CurrentColor then
+			kind = "color-picker"
+		elseif options.CurrentKeybind or options.Keybind or options.Key then
+			kind = "keybind"
+		elseif type(options.CurrentValue) == "boolean" or type(options.Default) == "boolean" then
+			kind = "toggle"
+		elseif options.PlaceholderText or options.Placeholder or options.Input then
+			kind = "input"
+		elseif options.Content and not options.Callback then
+			kind = "paragraph"
+		elseif options.Callback then
+			kind = "button"
+		else
+			kind = "label"
+		end
+	end
+
+	local normalized = anchorlineNormalizeType(kind)
+	if normalized == "button" or normalized == "action" then
+		return self:CreateButton(options)
+	elseif normalized == "toggle" or normalized == "switch" or normalized == "checkbox" then
+		return self:CreateToggle(options)
+	elseif normalized == "slider" or normalized == "range" then
+		return self:CreateSlider(options)
+	elseif normalized == "input" or normalized == "textbox" or normalized == "text-box" or normalized == "textinput" then
+		return self:CreateInput(options)
+	elseif normalized == "dropdown" or normalized == "select" or normalized == "combo" or normalized == "combobox" then
+		return self:CreateDropdown(options)
+	elseif normalized == "keybind" or normalized == "bind" or normalized == "key" then
+		return self:CreateKeybind(options)
+	elseif normalized == "color" or normalized == "colour" or normalized == "colorpicker" or normalized == "color-picker" or normalized == "colourpicker" then
+		return self:CreateColorPicker(options)
+	elseif normalized == "progress" or normalized == "meter" then
+		return self:CreateProgress(options)
+	elseif normalized == "section" or normalized == "heading" then
+		return self:CreateSection(options)
+	elseif normalized == "divider" or normalized == "separator" or normalized == "line" then
+		return self:CreateDivider()
+	elseif normalized == "paragraph" or normalized == "textblock" or normalized == "text-block" then
+		return self:CreateParagraph(options)
+	elseif normalized == "infobox" or normalized == "info-box" or normalized == "notice" or normalized == "callout" then
+		if self.CreateCallout and normalized == "callout" then
+			return self:CreateCallout(options)
+		end
+		return self:CreateInfoBox(options)
+	elseif normalized == "badge" and self.CreateBadge then
+		return self:CreateBadge(options)
+	elseif normalized == "stat" or normalized == "statcard" or normalized == "stat-card" then
+		if self.CreateStatCard then return self:CreateStatCard(options) end
+	elseif normalized == "textarea" or normalized == "text-area" then
+		if self.CreateTextArea then return self:CreateTextArea(options) end
+	elseif normalized == "spacer" then
+		if self.CreateSpacer then return self:CreateSpacer(options.Height or options.Size or 12) end
+	end
+	return self:CreateLabel(options.Text or options.Name or options.Title or tostring(kind))
+end
+
+Tab.AddElement = Tab.CreateElement
+Tab.Element = Tab.CreateElement
+Tab.AddButton = Tab.CreateButton
+Tab.Button = Tab.CreateButton
+Tab.NewButton = Tab.CreateButton
+Tab.AddToggle = Tab.CreateToggle
+Tab.Toggle = Tab.CreateToggle
+Tab.NewToggle = Tab.CreateToggle
+Tab.AddSlider = Tab.CreateSlider
+Tab.Slider = Tab.CreateSlider
+Tab.NewSlider = function(self, name, description, minValue, maxValue, defaultValue, callback)
+	return self:CreateSlider({Name = name, Description = description, Range = {minValue or 0, maxValue or 100}, CurrentValue = defaultValue, Callback = callback})
+end
+Tab.AddInput = Tab.CreateInput
+Tab.Input = Tab.CreateInput
+Tab.TextBox = Tab.CreateInput
+Tab.Textbox = Tab.CreateInput
+Tab.AddTextbox = Tab.CreateInput
+Tab.NewTextBox = function(self, name, description, callback)
+	return self:CreateInput({Name = name, Description = description, Callback = callback})
+end
+Tab.AddDropdown = Tab.CreateDropdown
+Tab.Dropdown = Tab.CreateDropdown
+Tab.NewDropdown = function(self, name, description, options, callback)
+	return self:CreateDropdown({Name = name, Description = description, Options = options or {}, Callback = callback})
+end
+Tab.AddKeybind = Tab.CreateKeybind
+Tab.Keybind = Tab.CreateKeybind
+Tab.NewKeybind = function(self, name, description, key, callback)
+	return self:CreateKeybind({Name = name, Description = description, CurrentKeybind = key, Callback = callback})
+end
+Tab.AddColorPicker = Tab.CreateColorPicker
+Tab.ColorPicker = Tab.CreateColorPicker
+Tab.AddColorpicker = Tab.CreateColorPicker
+Tab.NewColorPicker = function(self, name, description, color, callback)
+	return self:CreateColorPicker({Name = name, Description = description, Color = color, Callback = callback})
+end
+Tab.AddLabel = Tab.CreateLabel
+Tab.Label = Tab.CreateLabel
+Tab.NewLabel = Tab.CreateLabel
+Tab.AddParagraph = Tab.CreateParagraph
+Tab.Paragraph = Tab.CreateParagraph
+Tab.AddSection = Tab.CreateSection
+Tab.Section = Tab.CreateSection
+Tab.AddDivider = Tab.CreateDivider
+Tab.Divider = Tab.CreateDivider
+
+local function anchorlineCreateSectionProxy(tab, name)
+	tab:CreateSection(name)
+	local section = {Tab = tab, Name = tostring(name or "Section")}
+	function section:CreateElement(...)
+		return self.Tab:CreateElement(...)
+	end
+	function section:CreateButton(...)
+		return self.Tab:CreateButton(...)
+	end
+	function section:CreateToggle(...)
+		return self.Tab:CreateToggle(...)
+	end
+	function section:CreateSlider(...)
+		return self.Tab:CreateSlider(...)
+	end
+	function section:CreateInput(...)
+		return self.Tab:CreateInput(...)
+	end
+	function section:CreateDropdown(...)
+		return self.Tab:CreateDropdown(...)
+	end
+	function section:CreateKeybind(...)
+		return self.Tab:CreateKeybind(...)
+	end
+	function section:CreateColorPicker(...)
+		return self.Tab:CreateColorPicker(...)
+	end
+	function section:CreateLabel(...)
+		return self.Tab:CreateLabel(...)
+	end
+	function section:CreateParagraph(...)
+		return self.Tab:CreateParagraph(...)
+	end
+	section.AddElement = section.CreateElement
+	section.AddButton = section.CreateButton
+	section.Button = section.CreateButton
+	section.NewButton = section.CreateButton
+	section.AddToggle = section.CreateToggle
+	section.Toggle = section.CreateToggle
+	section.NewToggle = section.CreateToggle
+	section.AddSlider = section.CreateSlider
+	section.Slider = section.CreateSlider
+	section.NewSlider = function(self, nameText, description, minValue, maxValue, defaultValue, callback)
+		return self.Tab:CreateSlider({Name = nameText, Description = description, Range = {minValue or 0, maxValue or 100}, CurrentValue = defaultValue, Callback = callback})
+	end
+	section.AddDropdown = section.CreateDropdown
+	section.Dropdown = section.CreateDropdown
+	section.NewDropdown = function(self, nameText, description, items, callback)
+		return self.Tab:CreateDropdown({Name = nameText, Description = description, Options = items or {}, Callback = callback})
+	end
+	section.AddTextbox = section.CreateInput
+	section.NewTextBox = function(self, nameText, description, callback)
+		return self.Tab:CreateInput({Name = nameText, Description = description, Callback = callback})
+	end
+	section.AddKeybind = section.CreateKeybind
+	section.NewKeybind = function(self, nameText, description, key, callback)
+		return self.Tab:CreateKeybind({Name = nameText, Description = description, CurrentKeybind = key, Callback = callback})
+	end
+	section.AddColorPicker = section.CreateColorPicker
+	section.NewColorPicker = function(self, nameText, description, color, callback)
+		return self.Tab:CreateColorPicker({Name = nameText, Description = description, Color = color, Callback = callback})
+	end
+	section.AddLabel = section.CreateLabel
+	section.NewLabel = section.CreateLabel
+	return section
+end
+
+function Tab:NewSection(name)
+	return anchorlineCreateSectionProxy(self, name)
+end
+
+local anchorlineNativeCreateTab = Window.CreateTab
+function Window:CreateTab(name, icon, description)
+	if type(name) == "table" then
+		local options = name
+		return anchorlineNativeCreateTab(self, options.Name or options.Title or options.Text or "Tab", options.Icon or options.Image or options.Logo, options.Description or options.Subtitle)
+	end
+	return anchorlineNativeCreateTab(self, name, icon, description)
+end
+
+Window.AddTab = Window.CreateTab
+Window.NewTab = Window.CreateTab
+Window.Tab = Window.CreateTab
+Window.GetOrCreateTab = Window.CreateOrGetTab
+Window.AddPage = Window.CreateTab
+Window.Page = Window.CreateTab
+
+function Window:CreateElement(kindOrOptions, maybeOptions)
+	local targetTab = self.ActiveTab
+	if not targetTab then
+		targetTab = self:CreateTab("Main", "home", "Main controls")
+	end
+	return targetTab:CreateElement(kindOrOptions, maybeOptions)
+end
+
+Window.AddElement = Window.CreateElement
+Window.Element = Window.CreateElement
+
+function Window:MakeNotification(options)
+	return self:Notify(options)
+end
+Window.CreateNotification = Window.Notify
+Window.Notification = Window.Notify
+Window.Minimise = Window.Minimize
+Window.ToggleUI = Window.Toggle
+Window.Close = Window.Destroy
+
+function Window:GetFlag(flag)
+	local controller = self.Flags and self.Flags[flag]
+	if controller and type(controller.Get) == "function" then
+		return controller:Get()
+	end
+	return nil
+end
+
+function Window:SetFlag(flag, value)
+	local controller = self.Flags and self.Flags[flag]
+	if controller and type(controller.Set) == "function" then
+		controller:Set(value)
+		return true
+	end
+	return false
+end
+
+function Window:LoadConfig(fileName)
+	return self:LoadConfiguration(fileName)
+end
+function Window:SaveConfig(fileName)
+	return self:SaveConfiguration(fileName)
+end
+
+local anchorlineNativeCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	if type(options) ~= "table" then
+		options = {Title = tostring(options or "Anchorline")}
+	end
+	options.Title = options.Title or options.Name or options.WindowName or options.LoadingTitle or "Anchorline"
+	options.Subtitle = options.Subtitle or options.LoadingSubtitle or options.Description or "Reusable interface library"
+	options.Configuration = options.Configuration or options.ConfigurationSaving or options.Config or {Enabled = false}
+	if options.ToggleKey == nil then
+		options.ToggleKey = options.HideKey or options.ToggleBind or Enum.KeyCode.RightShift
+	end
+	local window = anchorlineNativeCreateWindow(self, options)
+	return window
+end
+
+function Anchorline:MakeWindow(options)
+	return self:CreateWindow(options)
+end
+
+function Anchorline:CreateLib(name, theme)
+	return self:CreateWindow({Title = name or "Anchorline", Theme = theme or "Workbench"})
+end
+
+function Anchorline:MakeNotification(options)
+	return self:Notify(options)
+end
+
+function Anchorline:LoadConfiguration(fileName)
+	local window = self.LastWindow or Anchorline.LastWindow
+	if window and window.LoadConfiguration then
+		return window:LoadConfiguration(fileName)
+	end
+	return false
+end
+
+function Anchorline:SaveConfiguration(fileName)
+	local window = self.LastWindow or Anchorline.LastWindow
+	if window and window.SaveConfiguration then
+		return window:SaveConfiguration(fileName)
+	end
+	return false
+end
+
+function Anchorline:Destroy()
+	for _, window in ipairs(self.Windows or {}) do
+		if window and type(window.Destroy) == "function" then
+			pcall(function()
+				window:Destroy()
+			end)
+		end
+	end
+	self.Windows = setmetatable({}, {__mode = "v"})
+	self.LastWindow = nil
 end
 
 local anchorlineMetatable = getmetatable(Anchorline) or {}
