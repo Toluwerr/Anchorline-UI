@@ -1,15 +1,47 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "2.7.0"
+Anchorline.Version = "2.8.0"
 Anchorline.Flags = {}
 Anchorline.Windows = {}
+Anchorline.IconAliases = {
+	["📊"] = "bar-chart",
+	["📈"] = "bar-chart",
+	["📉"] = "bar-chart",
+	["⚙"] = "settings",
+	["⚙️"] = "settings",
+	["🏠"] = "home",
+	["👁"] = "eye",
+	["👁️"] = "eye",
+	["🎯"] = "target",
+	["🛡"] = "shield",
+	["🛡️"] = "shield",
+	["⚡"] = "bolt",
+	["📁"] = "folder",
+	["📂"] = "folder",
+	["📚"] = "book",
+	["📖"] = "book",
+	["ℹ"] = "info",
+	["ℹ️"] = "info",
+	["✅"] = "check",
+	["✓"] = "check",
+	["❌"] = "x",
+	["✕"] = "x",
+	["⚠"] = "warning",
+	["⚠️"] = "warning",
+	["💻"] = "code",
+	["⌨"] = "code",
+	["⌨️"] = "code",
+	["🔔"] = "bell",
+	["🧪"] = "test",
+	["🧰"] = "toolbox"
+}
 Anchorline.Motion = {
-	Micro = 0.18,
-	Fast = 0.28,
-	Base = 0.4,
-	Panel = 0.54,
-	Exit = 0.34
+	Micro = 0.14,
+	Fast = 0.24,
+	Base = 0.38,
+	Panel = 0.5,
+	Exit = 0.3
 }
 
 local Players = game:GetService("Players")
@@ -46,10 +78,13 @@ local function new(className, properties, children)
 		end
 	end
 	if properties then
-		for property, value in pairs(properties) do
-			pcall(function()
+		local assigned, err = pcall(function()
+			for property, value in pairs(properties) do
 				object[property] = value
-			end)
+			end
+		end)
+		if not assigned then
+			warn("Anchorline UI property assignment failed on " .. tostring(className) .. ": " .. tostring(err))
 		end
 	end
 	if children then
@@ -174,7 +209,12 @@ local function normalizeIconName(value)
 	if type(value) ~= "string" then
 		return ""
 	end
-	return value:lower():gsub("%s+", "-"):gsub("_", "-")
+	local raw = tostring(value)
+	local alias = Anchorline.IconAliases[raw] or Anchorline.IconAliases[raw:lower()]
+	if alias then
+		return alias
+	end
+	return raw:lower():gsub("%s+", "-"):gsub("_", "-"):gsub("[^%w%-]", "")
 end
 
 local function isNumericAssetString(value)
@@ -402,23 +442,31 @@ local function getThemeValue(window, key)
 end
 
 function Window:_track(instance, propertyMap)
-	self._themed[#self._themed + 1] = {Instance = instance, Properties = propertyMap}
+	if not instance or type(propertyMap) ~= "table" then
+		return instance
+	end
+	self._themed[instance] = propertyMap
 	for property, themeKey in pairs(propertyMap) do
-		if instance and instance.Parent ~= nil then
+		if instance.Parent ~= nil then
 			instance[property] = getThemeValue(self, themeKey)
 		end
 	end
 	return instance
 end
 
+function Window:_untrack(instance)
+	if self._themed and instance then
+		self._themed[instance] = nil
+	end
+end
+
 function Window:_applyTheme()
-	for i = #self._themed, 1, -1 do
-		local entry = self._themed[i]
-		if not entry.Instance or entry.Instance.Parent == nil then
-			table.remove(self._themed, i)
+	for instance, propertyMap in pairs(self._themed) do
+		if not instance or instance.Parent == nil then
+			self._themed[instance] = nil
 		else
-			for property, themeKey in pairs(entry.Properties) do
-				entry.Instance[property] = getThemeValue(self, themeKey)
+			for property, themeKey in pairs(propertyMap) do
+				instance[property] = getThemeValue(self, themeKey)
 			end
 		end
 	end
@@ -463,30 +511,30 @@ function Window:_resolveIcon(icon)
 		local provider = self.IconProvider
 		if provider then
 			local candidates = {icon, normalizeIconName(icon)}
+			local function parseAsset(asset)
+				if type(asset) == "string" then
+					if isNumericAssetString(asset) then
+						return {Image = "rbxassetid://" .. asset}
+					elseif isRobloxImagePath(asset) then
+						return {Image = asset}
+					end
+				end
+				return resolveIconAssetFromTable(asset)
+			end
 			for _, candidate in ipairs(candidates) do
 				if type(provider.GetAsset) == "function" then
-					local attempts = {
-						function() return provider.GetAsset(candidate, 48) end,
-						function() return provider:GetAsset(candidate, 48) end,
-						function() return provider.GetAsset(candidate) end,
-						function() return provider:GetAsset(candidate) end
-					}
-					for _, attempt in ipairs(attempts) do
-						local ok, asset = pcall(attempt)
-						if ok then
-							if type(asset) == "string" then
-								if isNumericAssetString(asset) then
-									return {Image = "rbxassetid://" .. asset}
-								elseif isRobloxImagePath(asset) then
-									return {Image = asset}
-								end
-							end
-							local resolved = resolveIconAssetFromTable(asset)
-							if resolved then
-								return resolved
-							end
-						end
-					end
+					local ok, asset = pcall(provider.GetAsset, provider, candidate, 48)
+					local parsed = ok and parseAsset(asset) or nil
+					if parsed then return parsed end
+					ok, asset = pcall(provider.GetAsset, candidate, 48)
+					parsed = ok and parseAsset(asset) or nil
+					if parsed then return parsed end
+					ok, asset = pcall(provider.GetAsset, provider, candidate)
+					parsed = ok and parseAsset(asset) or nil
+					if parsed then return parsed end
+					ok, asset = pcall(provider.GetAsset, candidate)
+					parsed = ok and parseAsset(asset) or nil
+					if parsed then return parsed end
 				end
 			end
 		end
@@ -496,6 +544,9 @@ end
 
 local function createVectorIcon(parent, iconName)
 	local name = normalizeIconName(iconName)
+	if name == "" then
+		name = "toolbox"
+	end
 	local shapes = {}
 	local function shape(className, props, children)
 		props = props or {}
@@ -519,7 +570,56 @@ local function createVectorIcon(parent, iconName)
 			Size = UDim2.fromOffset(size, size)
 		}, {corner(math.floor(size / 2))})
 	end
-	if name == "esp" or name == "eye" or name == "visuals" then
+	local function rect(x, y, w, h, r)
+		return shape("Frame", {
+			Position = UDim2.fromOffset(x, y),
+			Size = UDim2.fromOffset(w, h)
+		}, {corner(r or 2)})
+	end
+	if name == "bar-chart" or name == "analytics" or name == "stats" or name == "results" or name == "chart" then
+		rect(3, 11, 3, 6, 2)
+		rect(8, 7, 3, 10, 2)
+		rect(13, 4, 3, 13, 2)
+		line(2, 17, 16, 2, 0, 1)
+	elseif name == "info" or name == "help" then
+		dot(8, 3, 4)
+		line(9, 8, 2, 9, 0, 1)
+		line(7, 9, 4, 2, 0, 1)
+		line(7, 16, 6, 2, 0, 1)
+	elseif name == "check" or name == "success" then
+		line(4, 10, 6, 2, 45, 1)
+		line(8, 11, 10, 2, -45, 1)
+	elseif name == "x" or name == "close" or name == "error" then
+		line(4, 4, 13, 2, 45, 1)
+		line(4, 14, 13, 2, -45, 1)
+	elseif name == "warning" or name == "alert" then
+		line(10, 2, 2, 11, 0, 1)
+		dot(9, 15, 4)
+		line(5, 17, 12, 2, 0, 1)
+		line(5, 17, 7, 2, -63, 1)
+		line(10, 5, 7, 2, 63, 1)
+	elseif name == "code" or name == "script" or name == "terminal" then
+		line(3, 10, 6, 2, -35, 1)
+		line(3, 10, 6, 2, 35, 1)
+		line(12, 8, 6, 2, 35, 1)
+		line(12, 12, 6, 2, -35, 1)
+		line(9, 16, 5, 2, -70, 1)
+	elseif name == "bell" or name == "notification" then
+		rect(5, 7, 10, 9, 4)
+		line(4, 15, 12, 2, 0, 1)
+		dot(8, 17, 4)
+		line(9, 3, 2, 4, 0, 1)
+	elseif name == "toolbox" or name == "tools" then
+		rect(3, 7, 14, 10, 3)
+		line(7, 5, 6, 2, 0, 1)
+		line(7, 5, 2, 4, 0, 1)
+		line(12, 5, 2, 4, 0, 1)
+		line(3, 10, 14, 2, 0, 1)
+	elseif name == "test" or name == "flask" then
+		line(7, 3, 6, 2, 0, 1)
+		line(9, 5, 2, 6, 0, 1)
+		rect(5, 11, 10, 6, 3)
+	elseif name == "esp" or name == "eye" or name == "visuals" then
 		line(2, 9, 16, 2, 0, 1)
 		line(4, 5, 12, 2, 24, 1)
 		line(4, 13, 12, 2, -24, 1)
@@ -903,6 +1003,7 @@ function Window:Toggle()
 end
 
 function Window:Destroy()
+	self:_clearTemporaryConnections()
 	self:_setBackgroundBlur(false)
 	if self.BlurEffect then
 		task.delay(0.32, function()
@@ -917,6 +1018,7 @@ function Window:Destroy()
 		end
 	end
 	self._connections = {}
+	self._themed = setmetatable({}, {__mode = "k"})
 	if self.Gui then
 		self.Gui:Destroy()
 	end
@@ -949,38 +1051,77 @@ function Window:SetFrostedGlass(enabled)
 	return self
 end
 
+function Window:_storeTemporaryConnection(connection)
+	if not connection then
+		return connection
+	end
+	self._temporaryConnections = self._temporaryConnections or {}
+	self._temporaryConnections[#self._temporaryConnections + 1] = connection
+	return connection
+end
+
+function Window:_clearTemporaryConnections()
+	if not self._temporaryConnections then
+		return
+	end
+	for _, connection in ipairs(self._temporaryConnections) do
+		if connection and connection.Disconnect then
+			connection:Disconnect()
+		end
+	end
+	self._temporaryConnections = {}
+end
+
 function Window:_makeDraggable()
+	local header = self.Header
+	local root = self.Root
 	local dragging = false
 	local dragStart = nil
 	local startPosition = nil
-	local dragInput = nil
-	local header = self.Header
-	local root = self.Root
+	local moveConnection = nil
+	local endConnection = nil
+
+	local function stopDragging()
+		dragging = false
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
+		end
+		if endConnection then
+			endConnection:Disconnect()
+			endConnection = nil
+		end
+		self._temporaryConnections = {}
+	end
 
 	self._connections[#self._connections + 1] = header.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = input.Position
-			startPosition = root.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
 		end
-	end)
-
-	self._connections[#self._connections + 1] = header.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			dragInput = input
+		if self.Minimized then
+			return
 		end
-	end)
-
-	self._connections[#self._connections + 1] = UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and dragging and dragStart and startPosition then
-			local delta = input.Position - dragStart
+		stopDragging()
+		dragging = true
+		dragStart = input.Position
+		startPosition = root.Position
+		moveConnection = UserInputService.InputChanged:Connect(function(moveInput)
+			if not dragging or not dragStart or not startPosition then
+				return
+			end
+			if moveInput.UserInputType ~= Enum.UserInputType.MouseMovement and moveInput.UserInputType ~= Enum.UserInputType.Touch then
+				return
+			end
+			local delta = moveInput.Position - dragStart
 			root.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
-		end
+		end)
+		endConnection = UserInputService.InputEnded:Connect(function(endInput)
+			if endInput == input or endInput.UserInputType == input.UserInputType then
+				stopDragging()
+			end
+		end)
+		self:_storeTemporaryConnection(moveConnection)
+		self:_storeTemporaryConnection(endConnection)
 	end)
 end
 
@@ -988,6 +1129,8 @@ function Window:_makeResizable()
 	local resizing = false
 	local resizeStart = nil
 	local startSize = nil
+	local moveConnection = nil
+	local endConnection = nil
 	local function bounds()
 		local viewport = getViewportSize()
 		local margin = tonumber(self.SmartViewportMargin) or 44
@@ -998,38 +1141,56 @@ function Window:_makeResizable()
 		return minWidth, minHeight, maxWidth, maxHeight
 	end
 
+	local function stopResizing()
+		resizing = false
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
+		end
+		if endConnection then
+			endConnection:Disconnect()
+			endConnection = nil
+		end
+		self._temporaryConnections = {}
+		self:_refreshAdaptiveLayouts()
+		self:_refreshPageCanvases()
+	end
+
 	self._connections[#self._connections + 1] = self.ResizeHandle.InputBegan:Connect(function(input)
 		if self.Minimized then
 			return
 		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			resizing = true
-			resizeStart = input.Position
-			startSize = self.Root.AbsoluteSize
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					resizing = false
-				end
-			end)
-		end
-	end)
-
-	self._connections[#self._connections + 1] = UserInputService.InputChanged:Connect(function(input)
-		if not resizing or not resizeStart or not startSize then
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
 			return
 		end
-		if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		local delta = input.Position - resizeStart
-		local minWidth, minHeight, maxWidth, maxHeight = bounds()
-		local newWidth = math.clamp(startSize.X + delta.X, minWidth, maxWidth)
-		local newHeight = math.clamp(startSize.Y + delta.Y, minHeight, maxHeight)
-		self.Root.Size = UDim2.fromOffset(newWidth, newHeight)
-		self.Width = newWidth
-		self.Height = newHeight
-		self:_refreshAdaptiveLayouts()
-		self:_refreshPageCanvases()
+		stopResizing()
+		resizing = true
+		resizeStart = input.Position
+		startSize = self.Root.AbsoluteSize
+		moveConnection = UserInputService.InputChanged:Connect(function(moveInput)
+			if not resizing or not resizeStart or not startSize then
+				return
+			end
+			if moveInput.UserInputType ~= Enum.UserInputType.MouseMovement and moveInput.UserInputType ~= Enum.UserInputType.Touch then
+				return
+			end
+			local delta = moveInput.Position - resizeStart
+			local minWidth, minHeight, maxWidth, maxHeight = bounds()
+			local newWidth = math.clamp(startSize.X + delta.X, minWidth, maxWidth)
+			local newHeight = math.clamp(startSize.Y + delta.Y, minHeight, maxHeight)
+			self.Root.Size = UDim2.fromOffset(newWidth, newHeight)
+			self.Width = newWidth
+			self.Height = newHeight
+			self:_refreshAdaptiveLayouts()
+			self:_refreshPageCanvases()
+		end)
+		endConnection = UserInputService.InputEnded:Connect(function(endInput)
+			if endInput == input or endInput.UserInputType == input.UserInputType then
+				stopResizing()
+			end
+		end)
+		self:_storeTemporaryConnection(moveConnection)
+		self:_storeTemporaryConnection(endConnection)
 	end)
 end
 
@@ -1408,8 +1569,8 @@ function Window:CreateTab(name, icon, description)
 	local iconImage = new("ImageLabel", {
 		Name = "IconImage",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(14, 8),
-		Size = UDim2.fromOffset(18, 18),
+		Position = UDim2.fromOffset(13, 7),
+		Size = UDim2.fromOffset(20, 20),
 		ScaleType = Enum.ScaleType.Fit,
 		Visible = tab.IconAsset ~= nil,
 		Parent = button
@@ -1913,21 +2074,36 @@ function Tab:CreateSlider(options)
 	function controller:Get()
 		return value
 	end
-	hit.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			updateFromX(input.Position.X)
+	local moveConnection = nil
+	local endConnection = nil
+	local function stopDraggingSlider()
+		dragging = false
+		if moveConnection then
+			moveConnection:Disconnect()
+			moveConnection = nil
 		end
-	end)
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
+		if endConnection then
+			endConnection:Disconnect()
+			endConnection = nil
 		end
-	end)
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			updateFromX(input.Position.X)
+	end
+	window._connections[#window._connections + 1] = hit.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
 		end
+		stopDraggingSlider()
+		dragging = true
+		updateFromX(input.Position.X)
+		moveConnection = UserInputService.InputChanged:Connect(function(moveInput)
+			if dragging and (moveInput.UserInputType == Enum.UserInputType.MouseMovement or moveInput.UserInputType == Enum.UserInputType.Touch) then
+				updateFromX(moveInput.Position.X)
+			end
+		end)
+		endConnection = UserInputService.InputEnded:Connect(function(endInput)
+			if endInput == input or endInput.UserInputType == input.UserInputType then
+				stopDraggingSlider()
+			end
+		end)
 	end)
 	controller:Set(value, true)
 	self.Window:_registerFlag(options.Flag, controller)
@@ -2927,11 +3103,11 @@ end
 
 
 
-Anchorline.Motion.Micro = 0.16
-Anchorline.Motion.Fast = 0.26
-Anchorline.Motion.Base = 0.44
-Anchorline.Motion.Panel = 0.58
-Anchorline.Motion.Exit = 0.32
+Anchorline.Motion.Micro = 0.14
+Anchorline.Motion.Fast = 0.24
+Anchorline.Motion.Base = 0.38
+Anchorline.Motion.Panel = 0.5
+Anchorline.Motion.Exit = 0.3
 
 local function anchorlineKindColor(window, kind)
 	kind = tostring(kind or "Info")
@@ -3951,8 +4127,9 @@ function Anchorline:CreateWindow(options)
 	self.Minimized = false
 	self.Tabs = {}
 	self.Flags = {}
-	self._themed = {}
+	self._themed = setmetatable({}, {__mode = "k"})
 	self._connections = {}
+	self._temporaryConnections = {}
 	self._adaptiveHandlers = {}
 	self.Configuration = options.Configuration or options.ConfigurationSaving or {Enabled = false}
 	if self.Configuration.Enabled == nil then
@@ -3963,7 +4140,7 @@ function Anchorline:CreateWindow(options)
 	self.FrostedGlass = options.FrostedGlass ~= false
 	self.GlassTransparency = tonumber(options.GlassTransparency) or 0.12
 	self.BlurSize = tonumber(options.BlurSize) or 10
-	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide)
+	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide or Anchorline.IconProvider)
 
 	local parent = options.Parent or resolveParent()
 	local guiName = "Anchorline_" .. HttpService:GenerateGUID(false):gsub("-", "")
@@ -4291,6 +4468,24 @@ end
 function Anchorline:SetIconProvider(provider)
 	if type(provider) == "table" then
 		Anchorline.IconProvider = provider
+	end
+	return Anchorline
+end
+
+function Anchorline:SetIconAlias(alias, iconName)
+	if type(alias) == "string" and type(iconName) == "string" then
+		Anchorline.IconAliases[alias] = iconName
+	end
+	return Anchorline
+end
+
+function Anchorline:AddIconAliases(aliases)
+	if type(aliases) == "table" then
+		for alias, iconName in pairs(aliases) do
+			if type(alias) == "string" and type(iconName) == "string" then
+				Anchorline.IconAliases[alias] = iconName
+			end
+		end
 	end
 	return Anchorline
 end
