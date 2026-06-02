@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "3.6.0"
+Anchorline.Version = "3.7.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.IconStyle = "Lucide"
@@ -775,6 +775,7 @@ end
 
 local getLucideIconCandidates
 local getLucideAssetFromProvider
+local getBundledLucideAsset
 
 function Window:_resolveIcon(icon)
 	if icon == nil or icon == "" then
@@ -823,6 +824,11 @@ function Window:_resolveIcon(icon)
 			Anchorline.LucideProvider = Anchorline.LucideProvider or provider
 			return parsed
 		end
+	end
+
+	local bundled = getBundledLucideAsset and getBundledLucideAsset(icon, 48)
+	if bundled then
+		return bundled
 	end
 
 	return nil
@@ -967,6 +973,92 @@ function getLucideAssetFromProvider(provider, icon, size)
 			end
 		end
 	end
+	return nil
+end
+
+local bundledLucideIcons = nil
+local bundledLucideLoadAttempted = false
+local bundledLucideSource = "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/refs/heads/main/icons.lua"
+
+local function loadBundledLucideIcons()
+	if bundledLucideLoadAttempted then
+		return bundledLucideIcons
+	end
+	bundledLucideLoadAttempted = true
+
+	if type(loadstring) ~= "function" then
+		return nil
+	end
+
+	local content
+	local ok, result = pcall(function()
+		return game:HttpGet(bundledLucideSource)
+	end)
+	if ok and type(result) == "string" and #result > 0 then
+		content = result
+	end
+
+	if not content then
+		local requestFunction = (syn and syn.request) or (http and http.request) or http_request or request
+		if type(requestFunction) == "function" then
+			local requestOk, response = pcall(requestFunction, {Url = bundledLucideSource, Method = "GET"})
+			if requestOk and type(response) == "table" and type(response.Body) == "string" and #response.Body > 0 then
+				content = response.Body
+			end
+		end
+	end
+
+	if not content then
+		return nil
+	end
+
+	local chunkOk, chunk = pcall(loadstring, content)
+	if not chunkOk or type(chunk) ~= "function" then
+		return nil
+	end
+
+	local runOk, icons = pcall(chunk)
+	if runOk and type(icons) == "table" then
+		bundledLucideIcons = icons
+		return icons
+	end
+
+	return nil
+end
+
+function getBundledLucideAsset(icon, size)
+	local icons = loadBundledLucideIcons()
+	if type(icons) ~= "table" then
+		return nil
+	end
+
+	local requestedSize = tostring(size or 48) .. "px"
+	local sizedIcons = icons[requestedSize] or icons["48px"] or icons["256px"]
+	if type(sizedIcons) ~= "table" then
+		return nil
+	end
+
+	for _, candidate in ipairs(getLucideIconCandidates(icon)) do
+		local entry = sizedIcons[candidate]
+		if type(entry) == "table" and entry[1] then
+			local image = entry[1]
+			if type(image) == "number" then
+				image = "rbxassetid://" .. tostring(image)
+			elseif isNumericAssetString(image) then
+				image = "rbxassetid://" .. image
+			end
+			if type(image) == "string" and image ~= "" then
+				local rectSize = resolveIconVector2(entry[2]) or Vector2.new(size or 48, size or 48)
+				local rectOffset = resolveIconVector2(entry[3]) or Vector2.new(0, 0)
+				return {
+					Image = image,
+					ImageRectSize = rectSize,
+					ImageRectOffset = rectOffset
+				}
+			end
+		end
+	end
+
 	return nil
 end
 
@@ -4149,10 +4241,12 @@ function Tab:CreateHero(options)
 	local height = tonumber(options.Height) or 132
 	local frame = window:_createElement(self, titleText, titleText .. " " .. subtitleText .. " " .. bodyText .. " hero header", height)
 	frame:SetAttribute("AnchorlineMinWidth", 420)
+	frame.ClipsDescendants = true
 	frame.BackgroundTransparency = window.FrostedGlass and 0.08 or frame.BackgroundTransparency
 	local accentRail = new("Frame", {
 		Name = "HeroAccent",
-		Size = UDim2.new(0, 5, 1, 0),
+		Position = UDim2.fromOffset(0, 16),
+		Size = UDim2.new(0, 5, 1, -32),
 		BorderSizePixel = 0,
 		Parent = frame
 	}, {corner(3)})
