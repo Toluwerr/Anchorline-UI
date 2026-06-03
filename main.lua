@@ -1693,10 +1693,12 @@ function Window:_updatePageCanvas(page)
 		return 0
 	end
 	local contentHeight = self:_getPageContentHeight(page)
-	local bottomReserve = math.max(96, tonumber(self.ScrollBottomPadding) or 96)
+	local bottomReserve = math.max(64, tonumber(self.ScrollBottomPadding) or 64)
 	local viewportHeight = math.max(0, page.AbsoluteSize.Y)
 	local canvasHeight = math.max(viewportHeight, math.ceil(contentHeight + bottomReserve))
-	page.AutomaticCanvasSize = Enum.AutomaticSize.None
+	-- Let Roblox's layout engine grow the scrolling canvas from actual content.
+	-- CanvasSize is still set as a safe floor for environments where AutomaticCanvasSize lags one frame.
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	page.CanvasSize = UDim2.fromOffset(0, canvasHeight)
 	page.ScrollingDirection = Enum.ScrollingDirection.Y
 	page.ScrollingEnabled = true
@@ -2508,8 +2510,8 @@ function Window:CreateTab(name, icon, description)
 		Name = tab.Name .. "Page",
 		Size = UDim2.fromScale(1, 1),
 		CanvasSize = UDim2.fromOffset(0, 0),
-		AutomaticCanvasSize = Enum.AutomaticSize.None,
-		ScrollBarThickness = 5,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollBarThickness = 4,
 		ScrollBarImageTransparency = 0.18,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollingEnabled = true,
@@ -2527,8 +2529,15 @@ function Window:CreateTab(name, icon, description)
 	local pageLayout = page:FindFirstChildOfClass("UIListLayout")
 	if pageLayout then
 		self._connections[#self._connections + 1] = pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			page.CanvasSize = UDim2.fromOffset(0, pageLayout.AbsoluteContentSize.Y + math.max(24, tonumber(self.ScrollBottomPadding) or 64))
 			self:_updatePageCanvas(page)
 			self:_queueSmartResize()
+		end)
+		task.defer(function()
+			if page and page.Parent then
+				page.CanvasSize = UDim2.fromOffset(0, pageLayout.AbsoluteContentSize.Y + math.max(24, tonumber(self.ScrollBottomPadding) or 64))
+				self:_updatePageCanvas(page)
+			end
 		end)
 	end
 
@@ -2565,8 +2574,8 @@ end
 function Window:_createElement(tab, titleText, searchText, height)
 	local frame = new("Frame", {
 		Name = tostring(titleText or "Element"),
-		Size = UDim2.new(1, 0, 0, height or 54),
-		AutomaticSize = Enum.AutomaticSize.None,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = self.FrostedGlass and 0.14 or 0,
 		ClipsDescendants = false,
 		Parent = tab.Page
@@ -2575,6 +2584,7 @@ function Window:_createElement(tab, titleText, searchText, height)
 		padding(14, 14, 12, 12),
 		listLayout(Enum.FillDirection.Vertical, 8)
 	})
+	frame:SetAttribute("AnchorlinePreferredHeight", tonumber(height) or 54)
 	frame:SetAttribute("SearchText", tostring(searchText or titleText or ""))
 	frame:SetAttribute("AnchorlineMinWidth", 320)
 	local s = stroke(getThemeValue(self, "StrokeSoft"), 1, 0)
@@ -2585,6 +2595,9 @@ function Window:_createElement(tab, titleText, searchText, height)
 	local elementLayout = frame:FindFirstChildOfClass("UIListLayout")
 	if elementLayout then
 		self._connections[#self._connections + 1] = elementLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if tab and tab.Page then
+				self:_updatePageCanvas(tab.Page)
+			end
 			self:_queueSmartResize()
 		end)
 	end
@@ -3912,7 +3925,9 @@ function Tab:CreateActionGrid(options)
 	local gridHolder = new("Frame", {
 		Name = "ActionGrid",
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 36),
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		ClipsDescendants = false,
 		Parent = frame
 	})
 	local grid = new("UIGridLayout", {
@@ -4691,7 +4706,7 @@ function Tab:CreateCallout(options)
 	local mark = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Text = kind == "Success" and "✓" or kind == "Warning" and "!" or (kind == "Error" or kind == "Danger") and "×" or "i", Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = getThemeValue(window, "AccentText"), Parent = icon})
 	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 13), Size = UDim2.new(1, -66, 0, 20), Font = Enum.Font.GothamMedium, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
-	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 39), Size = UDim2.new(1, action and -170 or -66, 0, 34), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(52, 39), Size = UDim2.new(1, action and -170 or -66, 0, 34), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	if action then
 		local button = new("TextButton", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 13), Size = UDim2.fromOffset(104, 30), Text = tostring(action.Text or action.Name or "Open"), Font = Enum.Font.GothamMedium, TextSize = 12, AutoButtonColor = false, Parent = frame}, {corner(8)})
@@ -6279,11 +6294,14 @@ local function anchorlineVisualRelayoutGrid(window, frame, holder, grid, count, 
 	grid.FillDirectionMaxCells = columns
 	local rows = math.max(1, math.ceil(math.max(count or 0, 1) / columns))
 	local holderHeight = rows * cellHeight + math.max(rows - 1, 0) * gap
+	holder.ClipsDescendants = false
+	holder.AutomaticSize = Enum.AutomaticSize.Y
 	holder.Size = UDim2.new(1, 0, 0, holderHeight)
 	-- Include the parent element padding and list-layout gaps. Without this reserve,
 	-- captions at the bottom of grid/stat cards can be visually cut off.
 	local chromeReserve = 42
 	frame.ClipsDescendants = false
+	frame.AutomaticSize = Enum.AutomaticSize.Y
 	frame.Size = UDim2.new(1, 0, 0, (tonumber(topHeight) or 56) + holderHeight + chromeReserve)
 	window:_refreshPageCanvases()
 end
@@ -6309,7 +6327,7 @@ function Tab:CreateBanner(options)
 	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(72, 18), Size = UDim2.new(1, action and -214 or -92, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
 	local bodyHeight = math.max(34, measureWrappedText(bodyText, 13, Enum.Font.Gotham, math.max(frame.AbsoluteSize.X - (action and 260 or 120), 260)))
-	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(72, 45), Size = UDim2.new(1, action and -214 or -92, 0, math.min(bodyHeight, 44)), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(72, 45), Size = UDim2.new(1, action and -214 or -92, 0, math.min(bodyHeight, 44)), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	local actionButton
 	if action then
@@ -6359,7 +6377,7 @@ function Tab:CreateMetricGrid(options)
 	local frame = window:_createElement(self, name, name .. " metric grid stats", 196)
 	frame:SetAttribute("AnchorlineMinWidth", 440)
 	self:_headerRow(frame, name, options.Description)
-	local holder = new("Frame", {Name = "MetricCells", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 118), Parent = frame})
+	local holder = new("Frame", {Name = "MetricCells", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, ClipsDescendants = false, Parent = frame})
 	local grid = new("UIGridLayout", {SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Top, Parent = holder})
 	local cells = {}
 	local controller = {Type = "MetricGrid", Frame = frame}
@@ -6403,7 +6421,7 @@ function Tab:CreateCardGrid(options)
 	local frame = window:_createElement(self, name, name .. " card grid actions", 178)
 	frame:SetAttribute("AnchorlineMinWidth", 450)
 	self:_headerRow(frame, name, options.Description)
-	local holder = new("Frame", {Name = "Cards", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 106), Parent = frame})
+	local holder = new("Frame", {Name = "Cards", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, ClipsDescendants = false, Parent = frame})
 	local grid = new("UIGridLayout", {SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Top, Parent = holder})
 	local buttons = {}
 	local controller = {Type = "CardGrid", Frame = frame}
@@ -6415,7 +6433,7 @@ function Tab:CreateCardGrid(options)
 		anchorlineVisualIcon(window, iconBox, card.Icon or card.Image or "toolbox", 18, anchorlineKindColor(window, card.Type or card.Status or "Info"), iconBox.BackgroundColor3)
 		local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 12), Size = UDim2.new(1, -70, 0, 18), Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(card.Title or card.Name or "Card"), Parent = button})
 		window:_track(title, {TextColor3 = "Text"})
-		local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 52), Size = UDim2.new(1, -24, 0, 52), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(card.Description or card.Content or card.Text or ""), Parent = button})
+		local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 52), Size = UDim2.new(1, -24, 0, 52), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(card.Description or card.Content or card.Text or ""), Parent = button})
 		window:_track(body, {TextColor3 = "TextMuted"})
 		if card.Badge or card.Tag then
 			local badge = new("TextLabel", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 12), Size = UDim2.fromOffset(62, 20), BackgroundTransparency = window.FrostedGlass and 0.14 or 0, Font = Enum.Font.GothamMedium, TextSize = 10, Text = tostring(card.Badge or card.Tag), Parent = button}, {corner(8)})
@@ -7305,7 +7323,7 @@ function Tab:CreateModernCard(options)
 	anchorlineMakeIcon(window, iconBox, options.Icon or "sparkles", 22, anchorlineKindColor(window, options.Type or "Info"), getThemeValue(window, "AccentSoft"))
 	local titleLabel = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(68, 16), Size = UDim2.new(1, -88, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = title, Parent = frame})
 	window:_track(titleLabel, {TextColor3 = "Text"})
-	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(68, 42), Size = UDim2.new(1, -88, 0, bodyHeight + 4), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(68, 42), Size = UDim2.new(1, -88, 0, bodyHeight + 4), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	local controller = {Type = "ModernCard", Frame = frame, Title = titleLabel, Description = body, Accent = accent}
 	if options.Action then
@@ -7705,9 +7723,12 @@ end
 
 local function anchorlineSetFixedCard(frame, height)
 	if not frame then return end
-	frame.AutomaticSize = Enum.AutomaticSize.None
-	frame.Size = UDim2.new(1, 0, 0, math.max(48, math.floor(tonumber(height) or 80)))
-	frame.ClipsDescendants = true
+	-- This function used to force fixed heights, which caused card captions and long text
+	-- to be clipped. Keep it as a compatibility helper, but let cards expand vertically.
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.Size = UDim2.new(1, 0, 0, 0)
+	frame.ClipsDescendants = false
+	frame:SetAttribute("AnchorlineMinimumHeight", math.max(48, math.floor(tonumber(height) or 80)))
 	anchorlineStripLayoutObjects(frame)
 end
 
@@ -7728,7 +7749,7 @@ function Tab:CreateInfoBox(options)
 	local rail = new("Frame", {Name = "AccentRail", Position = UDim2.fromOffset(18, 18), Size = UDim2.fromOffset(5, 50), BackgroundColor3 = accent, BorderSizePixel = 0, Parent = frame}, {corner(3)})
 	local title = new("TextLabel", {Name = "Title", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 15), Size = UDim2.new(1, -58, 0, 22), Font = Enum.Font.GothamMedium, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
-	local body = new("TextLabel", {Name = "Body", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 43), Size = UDim2.new(1, -58, 0, 24), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	local body = new("TextLabel", {Name = "Body", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 43), Size = UDim2.new(1, -58, 0, 24), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	local resizeQueued = false
 	local lastWidth = 0
@@ -7801,7 +7822,7 @@ function Tab:CreateHero(options)
 	window:_track(title, {TextColor3 = "Text"})
 	local subtitle = new("TextLabel", {Name = "HeroSubtitle", BackgroundTransparency = 1, Position = UDim2.fromOffset(96, 44), Size = UDim2.new(1, -116, 0, 18), Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = subtitleText, Parent = frame})
 	window:_track(subtitle, {TextColor3 = "TextMuted"})
-	local body = new("TextLabel", {Name = "HeroBody", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 78), Size = UDim2.new(1, -56, 0, math.max(0, bodyHeight)), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
+	local body = new("TextLabel", {Name = "HeroBody", BackgroundTransparency = 1, Position = UDim2.fromOffset(36, 78), Size = UDim2.new(1, -56, 0, math.max(0, bodyHeight)), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	local function relayout()
 		if not frame or not frame.Parent then return end
@@ -7841,7 +7862,7 @@ function Tab:CreateModernCard(options)
 	anchorlineMakeIcon(window, iconBox, options.Icon or "sparkles", 22, accentColor, getThemeValue(window, "AccentSoft"))
 	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(88, 16), Size = UDim2.new(1, -108, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
-	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(88, 42), Size = UDim2.new(1, -108, 0, bodyHeight), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
+	local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(88, 42), Size = UDim2.new(1, -108, 0, bodyHeight), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, AutomaticSize = Enum.AutomaticSize.Y, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = description, Parent = frame})
 	window:_track(body, {TextColor3 = "TextMuted"})
 	local controller = {Type = "ModernCard", Frame = frame, Title = title, Description = body, Accent = accent}
 	if options.Action then
@@ -7883,7 +7904,7 @@ function Window:_ensureCommandPalette()
 	self:_track(close, {TextColor3 = "TextMuted"})
 	local search = new("TextBox", {Name = "Search", Position = UDim2.fromOffset(0, 40), Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 0, Text = "", PlaceholderText = "Search commands, tabs, and actions", ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Parent = card, ZIndex = 191}, {corner(12), stroke(getThemeValue(self, "StrokeSoft"), 1, 0), padding(12, 12, 0, 0)})
 	self:_track(search, {BackgroundColor3 = "Input", TextColor3 = "Text", PlaceholderColor3 = "TextFaint"})
-	local list = new("ScrollingFrame", {Name = "Results", Position = UDim2.fromOffset(0, 94), Size = UDim2.new(1, 0, 1, -94), BackgroundTransparency = 1, BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), Active = true, ScrollingEnabled = true, ClipsDescendants = true, ScrollBarThickness = 4, ScrollBarImageTransparency = 0.18, Parent = card, ZIndex = 191}, {listLayout(Enum.FillDirection.Vertical, 8)})
+	local list = new("ScrollingFrame", {Name = "Results", Position = UDim2.fromOffset(0, 94), Size = UDim2.new(1, 0, 1, -94), BackgroundTransparency = 1, BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, Active = true, ScrollingEnabled = true, ClipsDescendants = true, ScrollBarThickness = 4, ScrollBarImageTransparency = 0.18, Parent = card, ZIndex = 191}, {listLayout(Enum.FillDirection.Vertical, 8)})
 	self:_track(list, {ScrollBarImageColor3 = "Accent"})
 	local empty = new("TextLabel", {Name = "Empty", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.62), Size = UDim2.new(1, -40, 0, 40), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 13, Text = "No matching commands", Visible = false, Parent = card, ZIndex = 192})
 	self:_track(empty, {TextColor3 = "TextMuted"})
@@ -7971,8 +7992,89 @@ function Window:RefreshLayout(animated)
 	return self:SmartResize(animated ~= false)
 end
 
-Anchorline.Version = "4.1.0-opaque-k-fix"
-Anchorline.Build = "opaque-k-minibar-command-fix"
+
+-- Anchorline layout hardening patch: automatic canvases, non-clipping cards, and grid height binding.
+local function anchorlineBindScrollingCanvas(scroller, extraPadding)
+	if not scroller or not scroller:IsA("ScrollingFrame") then return end
+	extraPadding = tonumber(extraPadding) or 32
+	scroller.ClipsDescendants = true
+	scroller.ScrollingDirection = Enum.ScrollingDirection.Y
+	scroller.CanvasSize = UDim2.fromOffset(0, 0)
+	scroller.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroller.ScrollBarThickness = scroller.ScrollBarThickness > 0 and scroller.ScrollBarThickness or 4
+	scroller.Active = true
+	local layout = scroller:FindFirstChildOfClass("UIListLayout")
+	if layout then
+		local function resizeCanvas()
+			if scroller and scroller.Parent then
+				scroller.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + extraPadding)
+			end
+		end
+		resizeCanvas()
+		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeCanvas)
+		task.defer(resizeCanvas)
+	end
+end
+
+local function anchorlineBindGridHeight(gridFrame, gridLayout, extraPadding)
+	if not gridFrame or not gridLayout then return end
+	extraPadding = tonumber(extraPadding) or 0
+	gridFrame.AutomaticSize = Enum.AutomaticSize.Y
+	gridFrame.ClipsDescendants = false
+	local function resizeGrid()
+		if gridFrame and gridFrame.Parent then
+			gridFrame.Size = UDim2.new(1, 0, 0, gridLayout.AbsoluteContentSize.Y + extraPadding)
+		end
+	end
+	resizeGrid()
+	gridLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeGrid)
+	task.defer(resizeGrid)
+end
+
+local originalUpdatePageCanvas = Window._updatePageCanvas
+function Window:_updatePageCanvas(page)
+	local canvasHeight, contentHeight = originalUpdatePageCanvas(self, page)
+	anchorlineBindScrollingCanvas(page, math.max(64, tonumber(self.ScrollBottomPadding) or 64))
+	return canvasHeight, contentHeight
+end
+
+local originalCreateElement = Window._createElement
+function Window:_createElement(tab, titleText, searchText, height)
+	local frame = originalCreateElement(self, tab, titleText, searchText, height)
+	if frame then
+		frame.ClipsDescendants = false
+		frame.AutomaticSize = Enum.AutomaticSize.Y
+		if frame.Size.Y.Offset > 0 then
+			frame:SetAttribute("AnchorlinePreferredHeight", frame.Size.Y.Offset)
+		end
+		frame.Size = UDim2.new(1, 0, 0, 0)
+		local layout = frame:FindFirstChildOfClass("UIListLayout")
+		if layout then
+			layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+				if tab and tab.Page then
+					self:_updatePageCanvas(tab.Page)
+				end
+			end)
+		end
+	end
+	return frame
+end
+
+local originalRelayoutGrid = anchorlineVisualRelayoutGrid
+anchorlineVisualRelayoutGrid = function(window, frame, holder, grid, count, minimumWidth, cellHeight, topHeight, gap)
+	originalRelayoutGrid(window, frame, holder, grid, count, minimumWidth, cellHeight, topHeight, gap)
+	anchorlineBindGridHeight(holder, grid, 0)
+	if frame then
+		frame.ClipsDescendants = false
+		frame.AutomaticSize = Enum.AutomaticSize.Y
+	end
+	if window then
+		window:_refreshPageCanvases()
+	end
+end
+
+Anchorline.Version = "4.2.0-layout-hardening"
+Anchorline.Build = "layout-clipping-hardening"
 
 local anchorlineMetatable = getmetatable(Anchorline) or {}
 anchorlineMetatable.__call = function(self, options)
