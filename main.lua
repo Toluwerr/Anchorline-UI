@@ -14,6 +14,8 @@ Anchorline.Motion = {
 	Panel = 0.5,
 	Exit = 0.3
 }
+Anchorline.CornerLimit = 16
+Anchorline.DefaultToggleKey = Enum and Enum.KeyCode and Enum.KeyCode.K or nil
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -194,7 +196,10 @@ local function tween(object, time, properties, easingStyle, easingDirection)
 end
 
 local function corner(radius)
-	return new("UICorner", {CornerRadius = UDim.new(0, radius or 8)})
+	local value = tonumber(radius) or 8
+	local maxRadius = tonumber(Anchorline.CornerLimit) or 16
+	value = math.clamp(value, 0, maxRadius)
+	return new("UICorner", {CornerRadius = UDim.new(0, value)})
 end
 
 local function stroke(color, thickness, transparency)
@@ -1178,9 +1183,6 @@ function getBundledLucideAsset(icon, size)
 end
 
 local function createVectorIcon(parent, iconName)
-	if Anchorline.IconStyle == "Lucide" then
-		return createTextFallbackIcon(parent, iconName)
-	end
 	local name = normalizeIconName(iconName)
 	if name == "" then
 		name = "toolbox"
@@ -1201,7 +1203,15 @@ local function createVectorIcon(parent, iconName)
 		["sliders-horizontal"] = "sliders",
 		["palette"] = "color",
 		["magnifying-glass"] = "search",
-		["wrench"] = "tools"
+		["wrench"] = "tools",
+		["message-square"] = "message",
+		["message-circle"] = "message",
+		["layout-dashboard"] = "dashboard",
+		["panel-left"] = "dashboard",
+		["box"] = "box",
+		["layers"] = "layers",
+		["sparkles"] = "sparkles",
+		["command"] = "command"
 	}
 	name = aliases[name] or name
 
@@ -1479,6 +1489,44 @@ local function createVectorIcon(parent, iconName)
 		line(8, 6, 9, 2, 0, 1)
 		line(8, 11, 9, 2, 0, 1)
 		line(8, 16, 9, 2, 0, 1)
+	elseif name == "sparkles" then
+		line(8, 2, 2, 6, 0, 1)
+		line(8, 12, 2, 6, 0, 1)
+		line(2, 8, 6, 2, 0, 1)
+		line(12, 8, 6, 2, 0, 1)
+		line(5, 5, 4, 2, 45, 1)
+		line(11, 5, 4, 2, -45, 1)
+		line(5, 13, 4, 2, -45, 1)
+		line(11, 13, 4, 2, 45, 1)
+		dot(15, 3, 3)
+		dot(2, 15, 3)
+	elseif name == "message" then
+		rect(3, 4, 14, 10, 3)
+		line(6, 14, 4, 4, -35, 1)
+		line(6, 8, 8, 1, 0, 1)
+		line(6, 11, 6, 1, 0, 1)
+	elseif name == "dashboard" then
+		rect(3, 3, 6, 6, 2)
+		rect(11, 3, 6, 4, 2)
+		rect(3, 11, 6, 6, 2)
+		rect(11, 9, 6, 8, 2)
+	elseif name == "layers" then
+		line(4, 6, 8, 4, -25, 1)
+		line(8, 2, 8, 4, 25, 1)
+		line(4, 10, 8, 4, -25, 1)
+		line(8, 6, 8, 4, 25, 1)
+		line(4, 14, 8, 4, -25, 1)
+		line(8, 10, 8, 4, 25, 1)
+	elseif name == "box" then
+		rect(4, 5, 12, 11, 2)
+		line(4, 5, 6, 4, -25, 1)
+		line(10, 5, 6, 4, 25, 1)
+		line(10, 9, 1, 7, 0, 1)
+	elseif name == "command" then
+		rect(3, 3, 5, 5, 2)
+		rect(12, 3, 5, 5, 2)
+		rect(3, 12, 5, 5, 2)
+		rect(12, 12, 5, 5, 2)
 	elseif name == "pause" then
 		rect(6, 4, 3, 12, 1)
 		rect(12, 4, 3, 12, 1)
@@ -1871,29 +1919,25 @@ function Window:Destroy()
 end
 
 function Window:_setBackgroundBlur(enabled)
-	if not self.FrostedGlass then
-		return
+	-- Anchorline is opaque by default. This intentionally avoids adding a Lighting BlurEffect.
+	if self.BlurEffect then
+		pcall(function()
+			self.BlurEffect.Size = 0
+			self.BlurEffect:Destroy()
+		end)
+		self.BlurEffect = nil
 	end
-	if enabled then
-		if not self.BlurEffect then
-			self.BlurEffect = new("BlurEffect", {
-				Name = "AnchorlineBackgroundBlur",
-				Size = 0,
-				Parent = Lighting
-			})
-		end
-		tween(self.BlurEffect, 0.45, {Size = self.BlurSize or 10}, Enum.EasingStyle.Quint)
-	elseif self.BlurEffect then
-		tween(self.BlurEffect, 0.28, {Size = 0}, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-	end
+	return self
 end
 
 function Window:SetFrostedGlass(enabled)
-	self.FrostedGlass = enabled and true or false
+	-- Kept for API compatibility, but Anchorline now stays opaque and never blurs the screen.
+	self.FrostedGlass = false
+	self.GlassTransparency = 0
 	if self.Root then
-		self.Root.BackgroundTransparency = self.FrostedGlass and (self.GlassTransparency or 0.12) or 0
+		self.Root.BackgroundTransparency = 0
 	end
-	self:_setBackgroundBlur(self.FrostedGlass and not self.Hidden)
+	self:_setBackgroundBlur(false)
 	return self
 end
 
@@ -1942,9 +1986,6 @@ function Window:_makeDraggable()
 
 	self._connections[#self._connections + 1] = header.InputBegan:Connect(function(input)
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
-			return
-		end
-		if self.Minimized then
 			return
 		end
 		stopDragging()
@@ -4217,19 +4258,16 @@ function Window:SetAccentColor(color)
 end
 
 function Window:SetGlassTransparency(value)
-	local transparency = math.clamp(tonumber(value) or self.GlassTransparency or 0.12, 0, 1)
-	self.GlassTransparency = transparency
+	self.GlassTransparency = 0
 	if self.Root then
-		tween(self.Root, Anchorline.Motion.Base, {BackgroundTransparency = self.FrostedGlass and transparency or 0}, Enum.EasingStyle.Quint)
+		tween(self.Root, Anchorline.Motion.Base, {BackgroundTransparency = 0}, Enum.EasingStyle.Quint)
 	end
 	return self
 end
 
 function Window:SetBlurSize(size)
-	self.BlurSize = math.clamp(tonumber(size) or self.BlurSize or 10, 0, 30)
-	if self._blurEffect then
-		tween(self._blurEffect, Anchorline.Motion.Base, {Size = self.BlurSize}, Enum.EasingStyle.Quint)
-	end
+	self.BlurSize = 0
+	self:_setBackgroundBlur(false)
 	return self
 end
 
@@ -5126,9 +5164,9 @@ function Anchorline:CreateWindow(options)
 	end
 	self.ThemeName = "Workbench"
 	self.Theme = Anchorline.Themes.Workbench
-	self.FrostedGlass = options.FrostedGlass ~= false
-	self.GlassTransparency = tonumber(options.GlassTransparency) or 0.12
-	self.BlurSize = tonumber(options.BlurSize) or 10
+	self.FrostedGlass = false
+	self.GlassTransparency = 0
+	self.BlurSize = 0
 	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide or Anchorline.IconProvider)
 
 	local parent = options.Parent or resolveParent()
@@ -5147,11 +5185,11 @@ function Anchorline:CreateWindow(options)
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = options.Position or UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(self.Width, self.Height),
-		BackgroundTransparency = self.FrostedGlass and self.GlassTransparency or 0,
+		BackgroundTransparency = 0,
 		GroupTransparency = 0,
 		ClipsDescendants = true,
 		Parent = gui
-	}, {corner(25)})
+	}, {corner(16)})
 	self.Root = root
 	self.RootScale = new("UIScale", {
 		Scale = tonumber(options.Scale or options.DPIScale or Anchorline.DPIScale) or 1,
@@ -5163,11 +5201,7 @@ function Anchorline:CreateWindow(options)
 	self:_track(rootStroke, {Color = "Stroke"})
 	local rootGradient = new("UIGradient", {
 		Rotation = 90,
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.52, 0.05),
-			NumberSequenceKeypoint.new(1, 0.1)
-		})
+		Transparency = NumberSequence.new(0)
 	})
 	rootGradient.Parent = root
 
@@ -5403,7 +5437,7 @@ function Anchorline:CreateWindow(options)
 	self:_makeDraggable()
 	self:_makeResizable()
 
-	local toggleKey = normalizeKey(options.ToggleKey or options.HideKey or Enum.KeyCode.RightShift)
+	local toggleKey = Enum.KeyCode.K
 	self._connections[#self._connections + 1] = UserInputService.InputBegan:Connect(function(input, processed)
 		if processed or isTyping() then
 			return
@@ -5414,11 +5448,11 @@ function Anchorline:CreateWindow(options)
 	end)
 
 	if options.CommandPalette ~= false and type(self.EnableCommandPaletteKeybind) == "function" then
-		self:EnableCommandPaletteKeybind(options.CommandPaletteKey or Enum.KeyCode.K, options.CommandPaletteRequiresControl ~= false)
+		self:EnableCommandPaletteKeybind(options.CommandPaletteKey or Enum.KeyCode.P, options.CommandPaletteRequiresControl ~= false)
 	end
 
 	self:SetTheme(options.Theme or "Workbench")
-	self:_setBackgroundBlur(self.FrostedGlass)
+	self:_setBackgroundBlur(false)
 	Anchorline.Windows[#Anchorline.Windows + 1] = self
 	Anchorline.LastWindow = self
 
@@ -7814,7 +7848,7 @@ function Window:_renderCommandPalette(query)
 		local haystack = (tostring(item.Name or "") .. " " .. tostring(item.Description or "")):lower()
 		if query == "" or haystack:find(query, 1, true) then
 			shown += 1
-			local row = new("TextButton", {Name = "CommandRow", Size = UDim2.new(1, -2, 0, 58), BackgroundTransparency = 0, AutoButtonColor = false, Text = "", Parent = list, ZIndex = 193}, {corner(14), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
+			local row = new("TextButton", {Name = "CommandRow", Size = UDim2.new(1, -8, 0, 58), BackgroundTransparency = 0, AutoButtonColor = false, Text = "", Parent = list, ZIndex = 193}, {corner(14), stroke(getThemeValue(self, "StrokeSoft"), 1, 0)})
 			self:_track(row, {BackgroundColor3 = "Surface"})
 			local accentColor = anchorlineKindColor(self, item.Type or "Info")
 			local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(32, 32), BackgroundTransparency = self.FrostedGlass and 0.12 or 0, Parent = row, ZIndex = 194}, {corner(10)})
@@ -7824,10 +7858,8 @@ function Window:_renderCommandPalette(query)
 			self:_track(rowTitle, {TextColor3 = "Text"})
 			local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 31), Size = UDim2.new(1, -160, 0, 17), Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Description or ""), TextTransparency = 0, Parent = row, ZIndex = 194})
 			self:_track(desc, {TextColor3 = "TextMuted"})
-			if item.Shortcut then
-				local key = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(82, 24), BackgroundTransparency = self.FrostedGlass and 0.1 or 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = tostring(item.Shortcut), Parent = row, ZIndex = 195}, {corner(8)})
-				self:_track(key, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
-			end
+			local actionPill = new("TextLabel", {AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(86, 24), BackgroundTransparency = 0, Font = Enum.Font.GothamMedium, TextSize = 11, Text = item.Shortcut and tostring(item.Shortcut) or "Run", Parent = row, ZIndex = 195}, {corner(8)})
+			self:_track(actionPill, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
 			row.MouseEnter:Connect(function() tween(row, Anchorline.Motion.Micro, {BackgroundColor3 = getThemeValue(self, "SurfaceHover")}, Enum.EasingStyle.Quint) end)
 			row.MouseLeave:Connect(function() tween(row, Anchorline.Motion.Fast, {BackgroundColor3 = getThemeValue(self, "Surface")}, Enum.EasingStyle.Quint) end)
 			row.MouseButton1Click:Connect(function()
@@ -7836,7 +7868,7 @@ function Window:_renderCommandPalette(query)
 			end)
 		end
 	end
-	list.CanvasSize = UDim2.fromOffset(0, math.max(0, shown * 66))
+	list.CanvasSize = UDim2.fromOffset(0, math.max(0, shown * 66 + 12))
 	if self.CommandPalette.Empty then self.CommandPalette.Empty.Visible = shown == 0 end
 end
 
@@ -7883,8 +7915,8 @@ function Window:RefreshLayout(animated)
 	return self:SmartResize(animated ~= false)
 end
 
-Anchorline.Version = "3.10.0-stability-patch"
-Anchorline.Build = "main-fixed-actual"
+Anchorline.Version = "4.1.0-opaque-k-fix"
+Anchorline.Build = "opaque-k-minibar-command-fix"
 
 local anchorlineMetatable = getmetatable(Anchorline) or {}
 anchorlineMetatable.__call = function(self, options)
