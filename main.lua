@@ -1674,55 +1674,32 @@ function Window:_calculateSmartSize()
 end
 
 function Window:SmartResize(animated)
-	if not self.SmartResizeEnabled or not self.Root or self.Root.Parent == nil or self.Minimized then
+	-- Smart Resize has been intentionally disabled.
+	-- This method is kept as a compatibility no-op so older scripts do not error.
+	if not self.Root or self.Root.Parent == nil then
 		return self
 	end
 	self:_refreshAdaptiveLayouts()
 	self:_refreshPageCanvases()
-	local targetWidth, targetHeight, smartMinWidth, smartMinHeight = self:_calculateSmartSize()
-	self._computedMinWidth = smartMinWidth
-	self._computedMinHeight = smartMinHeight
-	local targetSize = UDim2.fromOffset(targetWidth, targetHeight)
-	local currentSize = self.Root.AbsoluteSize
-	local needsResize = math.abs(currentSize.X - targetWidth) >= 1 or math.abs(currentSize.Y - targetHeight) >= 1
-	if needsResize then
-		if animated then
-			tween(self.Root, 0.46, {Size = targetSize}, Enum.EasingStyle.Quint)
-		else
-			self.Root.Size = targetSize
-		end
-		self.Width = targetWidth
-		self.Height = targetHeight
-	end
-	local function deferredRefresh()
-		if self.Root and self.Root.Parent then
-			self:_refreshAdaptiveLayouts()
-			self:_refreshPageCanvases()
-		end
-	end
-	task.defer(deferredRefresh)
-	task.delay(0.04, deferredRefresh)
-	task.delay(0.12, deferredRefresh)
-	task.delay(0.28, deferredRefresh)
-	task.delay(0.5, deferredRefresh)
 	return self
 end
 
 function Window:RefreshLayout(animated)
 	self:_refreshAdaptiveLayouts()
 	self:_refreshPageCanvases()
-	return self:SmartResize(animated ~= false)
+	return self
 end
 
 function Window:_queueSmartResize()
-	if not self.SmartResizeEnabled or self._smartResizeQueued then
+	if self._layoutRefreshQueued then
 		return
 	end
-	self._smartResizeQueued = true
+	self._layoutRefreshQueued = true
 	task.delay(0.03, function()
-		self._smartResizeQueued = false
+		self._layoutRefreshQueued = false
 		if self.Root and self.Root.Parent then
-			self:SmartResize(true)
+			self:_refreshAdaptiveLayouts()
+			self:_refreshPageCanvases()
 		end
 	end)
 end
@@ -2972,44 +2949,28 @@ function Tab:CreateDropdown(options)
 	options = options or {}
 	local window = self.Window
 	local name = tostring(options.Name or "Dropdown")
-	local description = options.Description
-	local multiple = options.Multiple or options.MultiSelect or options.MultipleOptions or false
-	local optionsList = options.Options or options.Values or options.Items or {}
-
-	local selected = options.CurrentOption or options.CurrentValue or options.Default or (multiple and {} or nil)
+	local multiple = options.Multiple or options.MultiSelect or false
+	local optionsList = options.Options or {}
+	local selected = options.CurrentOption or options.CurrentValue or (multiple and {} or nil)
 	if multiple and type(selected) ~= "table" then
 		selected = {}
 	elseif not multiple and type(selected) == "table" then
 		selected = selected[1] and tostring(selected[1]) or nil
 	end
-
 	local searchableOptions = {}
 	for _, item in ipairs(optionsList) do
 		searchableOptions[#searchableOptions + 1] = tostring(item)
 	end
-
-	local headerHeight = description and description ~= "" and 38 or 26
-	local buttonHeight = 34
-	local verticalPadding = 24
-	local gap = 8
-	local closedHeight = verticalPadding + headerHeight + gap + buttonHeight
-
-	local frame = self.Window:_createElement(self, name, name .. " dropdown " .. table.concat(searchableOptions, " "), closedHeight)
-	frame:SetAttribute("AnchorlineDropdown", true)
-	frame:SetAttribute("AnchorlineClosedHeight", closedHeight)
-
-	self:_headerRow(frame, name, description)
-
+	local frame = self.Window:_createElement(self, name, name .. " dropdown " .. table.concat(searchableOptions, " "), 86)
+	self:_headerRow(frame, name, options.Description)
 	local button = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, buttonHeight),
+		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundTransparency = 0,
 		Text = "",
 		AutoButtonColor = false,
-		ClipsDescendants = true,
 		Parent = frame
 	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	self.Window:_track(button, {BackgroundColor3 = "Input"})
-
 	local selectedText = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(10, 0),
@@ -3021,41 +2982,28 @@ function Tab:CreateDropdown(options)
 		Parent = button
 	})
 	self.Window:_track(selectedText, {TextColor3 = "Text"})
-
 	local arrow = new("TextLabel", {
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -10, 0.5, 0),
-		Size = UDim2.fromOffset(20, 20),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -10, 0, 0),
+		Size = UDim2.fromOffset(20, 34),
 		Font = Enum.Font.GothamBold,
 		TextSize = 14,
 		Text = "v",
 		Parent = button
 	})
 	self.Window:_track(arrow, {TextColor3 = "TextMuted"})
-
-	local list = new("ScrollingFrame", {
+	local list = new("Frame", {
 		Name = "Options",
 		Size = UDim2.new(1, 0, 0, 0),
-		CanvasSize = UDim2.fromOffset(0, 0),
-		AutomaticCanvasSize = Enum.AutomaticSize.None,
-		ScrollBarThickness = 4,
-		ScrollBarImageTransparency = 0.35,
-		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollingEnabled = false,
-		Active = true,
-		BorderSizePixel = 0,
+		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		Visible = false,
-		ClipsDescendants = true,
 		Parent = frame
 	}, {listLayout(Enum.FillDirection.Vertical, 6)})
-
-	local listLayoutObject = list:FindFirstChildOfClass("UIListLayout")
 	local controller = {Type = "Dropdown", Flag = options.Flag}
 	local open = false
 	local optionButtons = {}
-
 	local function selectedList()
 		if multiple then
 			local values = {}
@@ -3067,12 +3015,11 @@ function Tab:CreateDropdown(options)
 			table.sort(values)
 			return values
 		end
-		if selected == nil or selected == "" then
+		if selected == nil then
 			return {}
 		end
 		return {selected}
 	end
-
 	local function renderText()
 		local values = selectedList()
 		if #values == 0 then
@@ -3081,59 +3028,6 @@ function Tab:CreateDropdown(options)
 			selectedText.Text = table.concat(values, ", ")
 		end
 	end
-
-	local function getOptionsContentHeight()
-		if listLayoutObject and listLayoutObject.AbsoluteContentSize.Y > 0 then
-			return math.ceil(listLayoutObject.AbsoluteContentSize.Y)
-		end
-		local count = 0
-		for _, child in ipairs(list:GetChildren()) do
-			if child:IsA("GuiObject") and child.Visible then
-				count += 1
-			end
-		end
-		if count <= 0 then
-			return 0
-		end
-		return count * 30 + math.max(0, count - 1) * 6
-	end
-
-	local function refreshDropdownLayout(animated)
-		local contentHeight = getOptionsContentHeight()
-		local maxListHeight = tonumber(options.MaxDropdownHeight or options.DropdownMaxHeight or options.MaxListHeight) or 190
-		maxListHeight = math.clamp(maxListHeight, 84, 260)
-
-		local listHeight = 0
-		if open and contentHeight > 0 then
-			listHeight = math.min(contentHeight, maxListHeight)
-		end
-
-		list.Visible = open and listHeight > 0
-		list.ScrollingEnabled = contentHeight > listHeight and listHeight > 0
-		list.CanvasSize = UDim2.fromOffset(0, math.max(contentHeight, listHeight))
-
-		local targetListSize = UDim2.new(1, 0, 0, listHeight)
-		local targetFrameHeight = closedHeight + (open and listHeight > 0 and (gap + listHeight) or 0)
-
-		if animated then
-			tween(list, 0.24, {Size = targetListSize}, Enum.EasingStyle.Quint)
-			tween(frame, 0.28, {Size = UDim2.new(1, 0, 0, targetFrameHeight)}, Enum.EasingStyle.Quint)
-		else
-			list.Size = targetListSize
-			frame.Size = UDim2.new(1, 0, 0, targetFrameHeight)
-		end
-
-		if window then
-			task.defer(function()
-				if window.Root and window.Root.Parent then
-					window:_refreshAdaptiveLayouts()
-					window:_refreshPageCanvases()
-					window:_queueSmartResize()
-				end
-			end)
-		end
-	end
-
 	local function renderButtons()
 		for _, b in ipairs(optionButtons) do
 			if b then
@@ -3141,7 +3035,6 @@ function Tab:CreateDropdown(options)
 			end
 		end
 		optionButtons = {}
-
 		for _, option in ipairs(optionsList) do
 			local optionName = tostring(option)
 			local optionButton = new("TextButton", {
@@ -3150,46 +3043,28 @@ function Tab:CreateDropdown(options)
 				Font = Enum.Font.Gotham,
 				TextSize = 13,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				TextTruncate = Enum.TextTruncate.AtEnd,
 				AutoButtonColor = false,
 				Parent = list
 			}, {corner(4), padding(10, 10, 0, 0)})
 			self.Window:_track(optionButton, {TextColor3 = "Text", BackgroundColor3 = "Surface"})
-
-			optionButton.MouseEnter:Connect(function()
-				if optionButton and optionButton.Parent then
-					tween(optionButton, 0.16, {BackgroundColor3 = getThemeValue(self.Window, "SurfaceHover")}, Enum.EasingStyle.Quint)
-				end
-			end)
-			optionButton.MouseLeave:Connect(function()
-				if optionButton and optionButton.Parent then
-					tween(optionButton, 0.16, {BackgroundColor3 = getThemeValue(self.Window, "Surface")}, Enum.EasingStyle.Quint)
-				end
-			end)
-
 			optionButton.MouseButton1Click:Connect(function()
 				if multiple then
 					selected[optionName] = not selected[optionName]
 				else
 					selected = optionName
 					open = false
+					list.Visible = false
 					arrow.Text = "v"
 					tween(arrow, 0.2, {Rotation = 0}, Enum.EasingStyle.Quint)
+					window:_queueSmartResize()
 				end
 				renderText()
-				refreshDropdownLayout(true)
 				safeCall(options.Callback, controller:Get())
 				window:_autoSave()
 			end)
-
 			optionButtons[#optionButtons + 1] = optionButton
 		end
-
-		task.defer(function()
-			refreshDropdownLayout(false)
-		end)
 	end
-
 	function controller:Set(newValue, loading)
 		if multiple then
 			selected = {}
@@ -3204,9 +3079,9 @@ function Tab:CreateDropdown(options)
 			end
 		else
 			if type(newValue) == "table" then
-				selected = newValue[1] and tostring(newValue[1]) or nil
+				selected = tostring(newValue[1] or "")
 			else
-				selected = newValue ~= nil and tostring(newValue) or nil
+				selected = tostring(newValue or "")
 			end
 		end
 		renderText()
@@ -3215,46 +3090,29 @@ function Tab:CreateDropdown(options)
 			window:_autoSave()
 		end
 	end
-
 	function controller:Get()
 		if multiple then
 			return selectedList()
 		end
 		return selected
 	end
-
 	function controller:Refresh(newOptions, keepValue)
 		optionsList = newOptions or {}
-		searchableOptions = {}
-		for _, item in ipairs(optionsList) do
-			searchableOptions[#searchableOptions + 1] = tostring(item)
-		end
-		frame:SetAttribute("SearchText", name .. " dropdown " .. table.concat(searchableOptions, " "))
 		if not keepValue then
 			selected = multiple and {} or nil
 		end
 		renderButtons()
 		renderText()
-		refreshDropdownLayout(false)
 	end
-
 	button.MouseButton1Click:Connect(function()
 		open = not open
+		list.Visible = open
 		arrow.Text = open and "^" or "v"
 		tween(arrow, 0.22, {Rotation = open and 180 or 0}, Enum.EasingStyle.Quint)
-		refreshDropdownLayout(true)
+		window:_queueSmartResize()
 	end)
-
-	if listLayoutObject then
-		self.Window._connections[#self.Window._connections + 1] = listLayoutObject:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-			refreshDropdownLayout(false)
-		end)
-	end
-
 	renderButtons()
 	renderText()
-	refreshDropdownLayout(false)
-
 	self.Window:_registerFlag(options.Flag, controller)
 	return controller
 end
@@ -4138,12 +3996,8 @@ function Window:SetPosition(position, animated)
 end
 
 function Window:SetSmartResize(enabled)
-	self.SmartResizeEnabled = enabled and true or false
-	if self.SmartResizeEnabled then
-		self:SmartResize(true)
-	else
-		self:RefreshLayout(false)
-	end
+	self.SmartResizeEnabled = false
+	self:RefreshLayout(false)
 	return self
 end
 
@@ -4190,7 +4044,7 @@ end
 
 function Window:FitContent(animated)
 	self._manualSizeLocked = false
-	return self:SmartResize(animated ~= false)
+	return self:RefreshLayout(false)
 end
 
 function Window:Notify(options)
@@ -5047,7 +4901,7 @@ function Anchorline:CreateWindow(options)
 	self.Width = tonumber(options.Width) or 780
 	self.Height = tonumber(options.Height) or 520
 	self.SidebarWidth = tonumber(options.SidebarWidth) or 188
-	self.SmartResizeEnabled = options.SmartResize ~= false
+	self.SmartResizeEnabled = false
 	self.SmartViewportMargin = tonumber(options.SmartViewportMargin) or 44
 	self.SmartContentMinWidth = tonumber(options.SmartContentMinWidth) or 390
 	self.ScrollBottomPadding = tonumber(options.ScrollBottomPadding) or 64
@@ -6055,9 +5909,11 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 	local asset = window:_resolveIcon(icon)
 	if asset then
 		local image = new("ImageLabel", {
+			Name = "ResolvedIconImage",
 			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
 			Size = UDim2.fromOffset(size, size),
-			Position = UDim2.fromOffset(0, 0),
 			ScaleType = Enum.ScaleType.Fit,
 			ImageColor3 = color or getThemeValue(window, "Accent"),
 			Parent = parent
@@ -6065,15 +5921,22 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 		applyIconAssetToImageLabel(image, asset)
 		return {Root = image, Shapes = {image}}
 	end
+
 	local holder = new("Frame", {
+		Name = "ResolvedVectorIcon",
 		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size, size),
 		Parent = parent
 	})
+
 	local scale = math.max(size / 20, 0.8)
 	local inner = new("Frame", {
+		Name = "VectorDrawingArea",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(math.floor((size - 20) / 2), math.floor((size - 20) / 2)),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(20, 20),
 		Parent = holder
 	})
@@ -6791,17 +6654,16 @@ local function anchorlineTrackConnection(window, connection)
 end
 
 local function anchorlineMakeIcon(window, parent, icon, size, color, backgroundColor)
+	local iconSize = tonumber(size) or 24
 	local holder = new("Frame", {
 		Name = "IconHolder",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(size or 24, size or 24),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(iconSize, iconSize),
 		Parent = parent
 	})
-	local made = anchorlineVisualIcon(window, holder, icon, size or 24, color or getThemeValue(window, "Accent"), backgroundColor or getThemeValue(window, "Surface"))
-	if made and made.Root then
-		made.Root.AnchorPoint = Vector2.new(0.5, 0.5)
-		made.Root.Position = UDim2.fromScale(0.5, 0.5)
-	end
+	anchorlineVisualIcon(window, holder, icon, iconSize, color or getThemeValue(window, "Accent"), backgroundColor or getThemeValue(window, "Surface"))
 	return holder
 end
 
