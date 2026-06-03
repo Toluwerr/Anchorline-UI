@@ -1126,6 +1126,9 @@ function getBundledLucideAsset(icon, size)
 end
 
 local function createVectorIcon(parent, iconName)
+	if Anchorline.IconStyle == "Lucide" then
+		return createTextFallbackIcon(parent, iconName)
+	end
 	local name = normalizeIconName(iconName)
 	if name == "" then
 		name = "toolbox"
@@ -2390,7 +2393,6 @@ function Window:CreateTab(name, icon, description)
 		Parent = iconBox
 	})
 	local iconShapes = createVectorIcon(iconHolder, icon or tab.Name)
-	centerVectorIconShapes(iconShapes, 20)
 	if #iconShapes == 0 then
 		iconHolder.Visible = false
 	end
@@ -2970,28 +2972,44 @@ function Tab:CreateDropdown(options)
 	options = options or {}
 	local window = self.Window
 	local name = tostring(options.Name or "Dropdown")
-	local multiple = options.Multiple or options.MultiSelect or false
-	local optionsList = options.Options or {}
-	local selected = options.CurrentOption or options.CurrentValue or (multiple and {} or nil)
+	local description = options.Description
+	local multiple = options.Multiple or options.MultiSelect or options.MultipleOptions or false
+	local optionsList = options.Options or options.Values or options.Items or {}
+
+	local selected = options.CurrentOption or options.CurrentValue or options.Default or (multiple and {} or nil)
 	if multiple and type(selected) ~= "table" then
 		selected = {}
 	elseif not multiple and type(selected) == "table" then
 		selected = selected[1] and tostring(selected[1]) or nil
 	end
+
 	local searchableOptions = {}
 	for _, item in ipairs(optionsList) do
 		searchableOptions[#searchableOptions + 1] = tostring(item)
 	end
-	local frame = self.Window:_createElement(self, name, name .. " dropdown " .. table.concat(searchableOptions, " "), 86)
-	self:_headerRow(frame, name, options.Description)
+
+	local headerHeight = description and description ~= "" and 38 or 26
+	local buttonHeight = 34
+	local verticalPadding = 24
+	local gap = 8
+	local closedHeight = verticalPadding + headerHeight + gap + buttonHeight
+
+	local frame = self.Window:_createElement(self, name, name .. " dropdown " .. table.concat(searchableOptions, " "), closedHeight)
+	frame:SetAttribute("AnchorlineDropdown", true)
+	frame:SetAttribute("AnchorlineClosedHeight", closedHeight)
+
+	self:_headerRow(frame, name, description)
+
 	local button = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, 34),
+		Size = UDim2.new(1, 0, 0, buttonHeight),
 		BackgroundTransparency = 0,
 		Text = "",
 		AutoButtonColor = false,
+		ClipsDescendants = true,
 		Parent = frame
 	}, {corner(5), stroke(getThemeValue(self.Window, "StrokeSoft"), 1, 0)})
 	self.Window:_track(button, {BackgroundColor3 = "Input"})
+
 	local selectedText = new("TextLabel", {
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(10, 0),
@@ -3003,28 +3021,41 @@ function Tab:CreateDropdown(options)
 		Parent = button
 	})
 	self.Window:_track(selectedText, {TextColor3 = "Text"})
+
 	local arrow = new("TextLabel", {
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -10, 0, 0),
-		Size = UDim2.fromOffset(20, 34),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -10, 0.5, 0),
+		Size = UDim2.fromOffset(20, 20),
 		Font = Enum.Font.GothamBold,
 		TextSize = 14,
 		Text = "v",
 		Parent = button
 	})
 	self.Window:_track(arrow, {TextColor3 = "TextMuted"})
-	local list = new("Frame", {
+
+	local list = new("ScrollingFrame", {
 		Name = "Options",
 		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.fromOffset(0, 0),
+		AutomaticCanvasSize = Enum.AutomaticSize.None,
+		ScrollBarThickness = 4,
+		ScrollBarImageTransparency = 0.35,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = false,
+		Active = true,
+		BorderSizePixel = 0,
 		BackgroundTransparency = 1,
 		Visible = false,
+		ClipsDescendants = true,
 		Parent = frame
 	}, {listLayout(Enum.FillDirection.Vertical, 6)})
+
+	local listLayoutObject = list:FindFirstChildOfClass("UIListLayout")
 	local controller = {Type = "Dropdown", Flag = options.Flag}
 	local open = false
 	local optionButtons = {}
+
 	local function selectedList()
 		if multiple then
 			local values = {}
@@ -3036,11 +3067,12 @@ function Tab:CreateDropdown(options)
 			table.sort(values)
 			return values
 		end
-		if selected == nil then
+		if selected == nil or selected == "" then
 			return {}
 		end
 		return {selected}
 	end
+
 	local function renderText()
 		local values = selectedList()
 		if #values == 0 then
@@ -3049,6 +3081,59 @@ function Tab:CreateDropdown(options)
 			selectedText.Text = table.concat(values, ", ")
 		end
 	end
+
+	local function getOptionsContentHeight()
+		if listLayoutObject and listLayoutObject.AbsoluteContentSize.Y > 0 then
+			return math.ceil(listLayoutObject.AbsoluteContentSize.Y)
+		end
+		local count = 0
+		for _, child in ipairs(list:GetChildren()) do
+			if child:IsA("GuiObject") and child.Visible then
+				count += 1
+			end
+		end
+		if count <= 0 then
+			return 0
+		end
+		return count * 30 + math.max(0, count - 1) * 6
+	end
+
+	local function refreshDropdownLayout(animated)
+		local contentHeight = getOptionsContentHeight()
+		local maxListHeight = tonumber(options.MaxDropdownHeight or options.DropdownMaxHeight or options.MaxListHeight) or 190
+		maxListHeight = math.clamp(maxListHeight, 84, 260)
+
+		local listHeight = 0
+		if open and contentHeight > 0 then
+			listHeight = math.min(contentHeight, maxListHeight)
+		end
+
+		list.Visible = open and listHeight > 0
+		list.ScrollingEnabled = contentHeight > listHeight and listHeight > 0
+		list.CanvasSize = UDim2.fromOffset(0, math.max(contentHeight, listHeight))
+
+		local targetListSize = UDim2.new(1, 0, 0, listHeight)
+		local targetFrameHeight = closedHeight + (open and listHeight > 0 and (gap + listHeight) or 0)
+
+		if animated then
+			tween(list, 0.24, {Size = targetListSize}, Enum.EasingStyle.Quint)
+			tween(frame, 0.28, {Size = UDim2.new(1, 0, 0, targetFrameHeight)}, Enum.EasingStyle.Quint)
+		else
+			list.Size = targetListSize
+			frame.Size = UDim2.new(1, 0, 0, targetFrameHeight)
+		end
+
+		if window then
+			task.defer(function()
+				if window.Root and window.Root.Parent then
+					window:_refreshAdaptiveLayouts()
+					window:_refreshPageCanvases()
+					window:_queueSmartResize()
+				end
+			end)
+		end
+	end
+
 	local function renderButtons()
 		for _, b in ipairs(optionButtons) do
 			if b then
@@ -3056,6 +3141,7 @@ function Tab:CreateDropdown(options)
 			end
 		end
 		optionButtons = {}
+
 		for _, option in ipairs(optionsList) do
 			local optionName = tostring(option)
 			local optionButton = new("TextButton", {
@@ -3064,28 +3150,46 @@ function Tab:CreateDropdown(options)
 				Font = Enum.Font.Gotham,
 				TextSize = 13,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				TextTruncate = Enum.TextTruncate.AtEnd,
 				AutoButtonColor = false,
 				Parent = list
 			}, {corner(4), padding(10, 10, 0, 0)})
 			self.Window:_track(optionButton, {TextColor3 = "Text", BackgroundColor3 = "Surface"})
+
+			optionButton.MouseEnter:Connect(function()
+				if optionButton and optionButton.Parent then
+					tween(optionButton, 0.16, {BackgroundColor3 = getThemeValue(self.Window, "SurfaceHover")}, Enum.EasingStyle.Quint)
+				end
+			end)
+			optionButton.MouseLeave:Connect(function()
+				if optionButton and optionButton.Parent then
+					tween(optionButton, 0.16, {BackgroundColor3 = getThemeValue(self.Window, "Surface")}, Enum.EasingStyle.Quint)
+				end
+			end)
+
 			optionButton.MouseButton1Click:Connect(function()
 				if multiple then
 					selected[optionName] = not selected[optionName]
 				else
 					selected = optionName
 					open = false
-					list.Visible = false
 					arrow.Text = "v"
 					tween(arrow, 0.2, {Rotation = 0}, Enum.EasingStyle.Quint)
-					window:_queueSmartResize()
 				end
 				renderText()
+				refreshDropdownLayout(true)
 				safeCall(options.Callback, controller:Get())
 				window:_autoSave()
 			end)
+
 			optionButtons[#optionButtons + 1] = optionButton
 		end
+
+		task.defer(function()
+			refreshDropdownLayout(false)
+		end)
 	end
+
 	function controller:Set(newValue, loading)
 		if multiple then
 			selected = {}
@@ -3100,9 +3204,9 @@ function Tab:CreateDropdown(options)
 			end
 		else
 			if type(newValue) == "table" then
-				selected = tostring(newValue[1] or "")
+				selected = newValue[1] and tostring(newValue[1]) or nil
 			else
-				selected = tostring(newValue or "")
+				selected = newValue ~= nil and tostring(newValue) or nil
 			end
 		end
 		renderText()
@@ -3111,29 +3215,46 @@ function Tab:CreateDropdown(options)
 			window:_autoSave()
 		end
 	end
+
 	function controller:Get()
 		if multiple then
 			return selectedList()
 		end
 		return selected
 	end
+
 	function controller:Refresh(newOptions, keepValue)
 		optionsList = newOptions or {}
+		searchableOptions = {}
+		for _, item in ipairs(optionsList) do
+			searchableOptions[#searchableOptions + 1] = tostring(item)
+		end
+		frame:SetAttribute("SearchText", name .. " dropdown " .. table.concat(searchableOptions, " "))
 		if not keepValue then
 			selected = multiple and {} or nil
 		end
 		renderButtons()
 		renderText()
+		refreshDropdownLayout(false)
 	end
+
 	button.MouseButton1Click:Connect(function()
 		open = not open
-		list.Visible = open
 		arrow.Text = open and "^" or "v"
 		tween(arrow, 0.22, {Rotation = open and 180 or 0}, Enum.EasingStyle.Quint)
-		window:_queueSmartResize()
+		refreshDropdownLayout(true)
 	end)
+
+	if listLayoutObject then
+		self.Window._connections[#self.Window._connections + 1] = listLayoutObject:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			refreshDropdownLayout(false)
+		end)
+	end
+
 	renderButtons()
 	renderText()
+	refreshDropdownLayout(false)
+
 	self.Window:_registerFlag(options.Flag, controller)
 	return controller
 end
@@ -5960,7 +6081,6 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 		new("UIScale", {Scale = scale, Parent = inner})
 	end
 	local shapes = createVectorIcon(inner, icon)
-	centerVectorIconShapes(shapes, 20)
 	for _, shapeObject in ipairs(shapes) do
 		if shapeObject:IsA("TextLabel") then
 			shapeObject.TextColor3 = color or getThemeValue(window, "Accent")
@@ -6674,8 +6794,6 @@ local function anchorlineMakeIcon(window, parent, icon, size, color, backgroundC
 	local holder = new("Frame", {
 		Name = "IconHolder",
 		BackgroundTransparency = 1,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size or 24, size or 24),
 		Parent = parent
 	})
