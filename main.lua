@@ -1,3 +1,4 @@
+-- Anchorline clipping fix applied: stat/metric/card content no longer cuts off
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
@@ -1692,7 +1693,7 @@ function Window:_updatePageCanvas(page)
 		return 0
 	end
 	local contentHeight = self:_getPageContentHeight(page)
-	local bottomReserve = math.max(32, tonumber(self.ScrollBottomPadding) or 64)
+	local bottomReserve = math.max(96, tonumber(self.ScrollBottomPadding) or 96)
 	local viewportHeight = math.max(0, page.AbsoluteSize.Y)
 	local canvasHeight = math.max(viewportHeight, math.ceil(contentHeight + bottomReserve))
 	page.AutomaticCanvasSize = Enum.AutomaticSize.None
@@ -2567,7 +2568,7 @@ function Window:_createElement(tab, titleText, searchText, height)
 		Size = UDim2.new(1, 0, 0, height or 54),
 		AutomaticSize = Enum.AutomaticSize.None,
 		BackgroundTransparency = self.FrostedGlass and 0.14 or 0,
-		ClipsDescendants = true,
+		ClipsDescendants = false,
 		Parent = tab.Page
 	}, {
 		corner(12),
@@ -3638,7 +3639,7 @@ function Tab:CreateInfoBox(options)
 	local body = tostring(options.Content or options.Text or options.Description or "")
 	local frame = window:_createElement(self, name, name .. " " .. body .. " info notice", 84)
 	frame.AutomaticSize = Enum.AutomaticSize.None
-	frame.ClipsDescendants = true
+	frame.ClipsDescendants = false
 	local inheritedLayout = frame:FindFirstChildOfClass("UIListLayout")
 	if inheritedLayout then
 		inheritedLayout:Destroy()
@@ -3772,8 +3773,9 @@ function Tab:CreateStatCard(options)
 	local name = tostring(options.Name or options.Title or "Statistic")
 	local value = tostring(options.Value or "0")
 	local caption = tostring(options.Caption or options.Description or "")
-	local frame = self.Window:_createElement(self, name, name .. " " .. value .. " stat metric", 92)
+	local frame = self.Window:_createElement(self, name, name .. " " .. value .. " stat metric", 224)
 	frame:SetAttribute("AnchorlineMinWidth", 360)
+	frame.ClipsDescendants = false
 	local top = new("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 28),
@@ -3805,27 +3807,76 @@ function Tab:CreateStatCard(options)
 	self.Window:_track(badge, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
 	local valueLabel = new("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, 46),
 		Font = Enum.Font.GothamBold,
-		TextSize = 22,
+		TextSize = 24,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
+		TextYAlignment = Enum.TextYAlignment.Center,
 		Text = value,
 		Parent = frame
 	})
 	self.Window:_track(valueLabel, {TextColor3 = "Text"})
 	local captionLabel = new("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Size = UDim2.new(1, 0, 0, 48),
+		AutomaticSize = Enum.AutomaticSize.None,
 		Font = Enum.Font.Gotham,
-		TextSize = 12,
+		TextSize = 13,
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = caption,
+		Visible = caption ~= "",
 		Parent = frame
 	})
 	self.Window:_track(captionLabel, {TextColor3 = "TextMuted"})
+
+	local layoutQueued = false
+	local function refreshHeight()
+		if not frame or frame.Parent == nil then
+			return
+		end
+
+		local availableWidth = math.max(160, frame.AbsoluteSize.X - 28)
+		local hasBadge = badgeText ~= ""
+		title.Size = UDim2.new(1, hasBadge and -116 or 0, 1, 0)
+		badge.Visible = hasBadge
+
+		local captionHeight = 0
+		if caption ~= "" then
+			captionHeight = math.max(44, measureWrappedText(caption, 13, Enum.Font.Gotham, availableWidth) + 16)
+		end
+
+		captionLabel.Visible = caption ~= ""
+		captionLabel.TextSize = 13
+		captionLabel.Size = UDim2.new(1, 0, 0, captionHeight)
+
+		-- Explicitly reserve top/bottom padding and layout gaps so the last caption line never clips.
+		local contentHeight = 28 + 12 + 46
+		if caption ~= "" then
+			contentHeight = contentHeight + 14 + captionHeight
+		end
+
+		local neededHeight = math.max(224, contentHeight + 64)
+		frame.ClipsDescendants = false
+		frame.Size = UDim2.new(1, 0, 0, neededHeight)
+		window:_refreshPageCanvases()
+	end
+	local function queueRefresh()
+		if layoutQueued then
+			return
+		end
+		layoutQueued = true
+		task.defer(function()
+			layoutQueued = false
+			refreshHeight()
+		end)
+	end
+	window._connections[#window._connections + 1] = frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(queueRefresh)
+	task.defer(refreshHeight)
+	task.delay(0.1, refreshHeight)
+
 	local controller = {Type = "StatCard"}
 	function controller:Set(newValue, newCaption)
 		value = tostring(newValue or "")
@@ -3835,12 +3886,13 @@ function Tab:CreateStatCard(options)
 			captionLabel.Text = caption
 		end
 		frame:SetAttribute("SearchText", name .. " " .. value .. " " .. caption)
-		window:_queueSmartResize()
+		queueRefresh()
+		window:_refreshPageCanvases()
 	end
 	function controller:SetBadge(newBadge)
 		badgeText = tostring(newBadge or "")
 		badge.Text = badgeText
-		badge.Visible = badgeText ~= ""
+		queueRefresh()
 	end
 	function controller:Get()
 		return value
@@ -5107,14 +5159,14 @@ function Tab:CreateMeter(options)
 	local minValue = tonumber(options.Min or (options.Range and options.Range[1])) or 0
 	local maxValue = tonumber(options.Max or (options.Range and options.Range[2])) or 100
 	local suffix = tostring(options.Suffix or "%")
-	local frame = window:_createElement(self, name, name .. " meter gauge", 98)
+	local frame = window:_createElement(self, name, name .. " meter gauge", 122)
 	self:_headerRow(frame, name, options.Description)
 	local valueText = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 28), Font = Enum.Font.GothamBold, TextSize = 22, TextXAlignment = Enum.TextXAlignment.Left, Text = "", Parent = frame})
 	window:_track(valueText, {TextColor3 = "Text"})
 	local track = new("Frame", {Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = window.FrostedGlass and 0.18 or 0, Parent = frame}, {corner(6)})
 	window:_track(track, {BackgroundColor3 = "Surface"})
 	local fill = new("Frame", {Size = UDim2.fromScale(0, 1), BorderSizePixel = 0, BackgroundColor3 = anchorlineKindColor(window, options.Type or "Info"), Parent = track}, {corner(6)})
-	local caption = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 18), Font = Enum.Font.Gotham, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(options.Caption or ""), Parent = frame})
+	local caption = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 48), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.None, Text = tostring(options.Caption or ""), Parent = frame})
 	window:_track(caption, {TextColor3 = "TextMuted"})
 	local controller = {Type = "Meter", Flag = options.Flag}
 	function controller:Set(newValue, loading)
@@ -5144,7 +5196,7 @@ function Anchorline:CreateWindow(options)
 	self.SmartResizeEnabled = options.SmartResize == true
 	self.SmartViewportMargin = tonumber(options.SmartViewportMargin) or 44
 	self.SmartContentMinWidth = tonumber(options.SmartContentMinWidth) or 390
-	self.ScrollBottomPadding = tonumber(options.ScrollBottomPadding) or 64
+	self.ScrollBottomPadding = tonumber(options.ScrollBottomPadding) or 96
 	self.MinWidth = tonumber(options.MinWidth) or 560
 	self.MinHeight = tonumber(options.MinHeight) or 390
 	self.MaxWidth = tonumber(options.MaxWidth) or 1040
@@ -6228,7 +6280,11 @@ local function anchorlineVisualRelayoutGrid(window, frame, holder, grid, count, 
 	local rows = math.max(1, math.ceil(math.max(count or 0, 1) / columns))
 	local holderHeight = rows * cellHeight + math.max(rows - 1, 0) * gap
 	holder.Size = UDim2.new(1, 0, 0, holderHeight)
-	frame.Size = UDim2.new(1, 0, 0, (tonumber(topHeight) or 56) + holderHeight)
+	-- Include the parent element padding and list-layout gaps. Without this reserve,
+	-- captions at the bottom of grid/stat cards can be visually cut off.
+	local chromeReserve = 42
+	frame.ClipsDescendants = false
+	frame.Size = UDim2.new(1, 0, 0, (tonumber(topHeight) or 56) + holderHeight + chromeReserve)
 	window:_refreshPageCanvases()
 end
 
@@ -6300,10 +6356,10 @@ function Tab:CreateMetricGrid(options)
 	local window = self.Window
 	local name = tostring(options.Name or options.Title or "Metrics")
 	local items = options.Items or options.Metrics or options.Stats or {}
-	local frame = window:_createElement(self, name, name .. " metric grid stats", 168)
+	local frame = window:_createElement(self, name, name .. " metric grid stats", 196)
 	frame:SetAttribute("AnchorlineMinWidth", 440)
 	self:_headerRow(frame, name, options.Description)
-	local holder = new("Frame", {Name = "MetricCells", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 96), Parent = frame})
+	local holder = new("Frame", {Name = "MetricCells", BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 118), Parent = frame})
 	local grid = new("UIGridLayout", {SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Left, VerticalAlignment = Enum.VerticalAlignment.Top, Parent = holder})
 	local cells = {}
 	local controller = {Type = "MetricGrid", Frame = frame}
@@ -6317,12 +6373,12 @@ function Tab:CreateMetricGrid(options)
 		window:_track(title, {TextColor3 = "TextMuted"})
 		local value = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 31), Size = UDim2.new(1, -64, 0, 24), Font = Enum.Font.GothamBold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Value or item.Text or "0"), Parent = cell})
 		window:_track(value, {TextColor3 = "Text"})
-		local delta = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 58), Size = UDim2.new(1, -24, 0, 16), Font = Enum.Font.GothamMedium, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Delta or item.Description or item.Subtitle or ""), Parent = cell})
+		local delta = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 60), Size = UDim2.new(1, -24, 0, 48), Font = Enum.Font.GothamMedium, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextTruncate = Enum.TextTruncate.None, Text = tostring(item.Delta or item.Description or item.Subtitle or ""), Parent = cell})
 		window:_track(delta, {TextColor3 = "TextFaint"})
 		cells[#cells + 1] = {Frame = cell, Title = title, Value = value, Delta = delta}
 	end
 	local function relayout()
-		anchorlineVisualRelayoutGrid(window, frame, holder, grid, #items, tonumber(options.MinCellWidth) or 168, tonumber(options.CellHeight) or 86, 56, tonumber(options.Gap) or 10)
+		anchorlineVisualRelayoutGrid(window, frame, holder, grid, #items, tonumber(options.MinCellWidth) or 188, math.max(146, tonumber(options.CellHeight) or 146), 62, tonumber(options.Gap) or 10)
 	end
 	function controller:SetItems(newItems)
 		items = newItems or {}
@@ -6359,7 +6415,7 @@ function Tab:CreateCardGrid(options)
 		anchorlineVisualIcon(window, iconBox, card.Icon or card.Image or "toolbox", 18, anchorlineKindColor(window, card.Type or card.Status or "Info"), iconBox.BackgroundColor3)
 		local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 12), Size = UDim2.new(1, -70, 0, 18), Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(card.Title or card.Name or "Card"), Parent = button})
 		window:_track(title, {TextColor3 = "Text"})
-		local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 52), Size = UDim2.new(1, -24, 0, 34), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(card.Description or card.Content or card.Text or ""), Parent = button})
+		local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 52), Size = UDim2.new(1, -24, 0, 52), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(card.Description or card.Content or card.Text or ""), Parent = button})
 		window:_track(body, {TextColor3 = "TextMuted"})
 		if card.Badge or card.Tag then
 			local badge = new("TextLabel", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 12), Size = UDim2.fromOffset(62, 20), BackgroundTransparency = window.FrostedGlass and 0.14 or 0, Font = Enum.Font.GothamMedium, TextSize = 10, Text = tostring(card.Badge or card.Tag), Parent = button}, {corner(8)})
@@ -6371,7 +6427,7 @@ function Tab:CreateCardGrid(options)
 		buttons[#buttons + 1] = button
 	end
 	local function relayout()
-		anchorlineVisualRelayoutGrid(window, frame, holder, grid, #cards, tonumber(options.MinCardWidth) or 190, tonumber(options.CardHeight) or 100, 56, tonumber(options.Gap) or 10)
+		anchorlineVisualRelayoutGrid(window, frame, holder, grid, #cards, tonumber(options.MinCardWidth) or 204, math.max(150, tonumber(options.CardHeight) or 150), 62, tonumber(options.Gap) or 10)
 	end
 	function controller:SetCards(newCards)
 		cards = newCards or {}
