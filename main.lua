@@ -705,6 +705,24 @@ local function resolveParent()
 	return CoreGui
 end
 
+local function cleanupStaleAnchorlineGuis()
+	if Anchorline._staleGuiCleanupDone then
+		return
+	end
+	Anchorline._staleGuiCleanupDone = true
+	local parents = {}
+	if CoreGui then parents[#parents + 1] = CoreGui end
+	local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then parents[#parents + 1] = playerGui end
+	for _, parent in ipairs(parents) do
+		for _, child in ipairs(parent:GetChildren()) do
+			if child:IsA("ScreenGui") and type(child.Name) == "string" and child.Name:match("^Anchorline_") then
+				pcall(function() child:Destroy() end)
+			end
+		end
+	end
+end
+
 local function getViewportSize()
 	local camera = Workspace.CurrentCamera
 	if camera and typeof(camera.ViewportSize) == "Vector2" then
@@ -5236,6 +5254,7 @@ function Anchorline:CreateWindow(options)
 	self.BlurSize = 0
 	self.IconProvider = findLucideProvider(options.IconProvider or options.Lucide or Anchorline.IconProvider)
 
+	cleanupStaleAnchorlineGuis()
 	local parent = options.Parent or resolveParent()
 	local guiName = "Anchorline_" .. HttpService:GenerateGUID(false):gsub("-", "")
 	local gui = new("ScreenGui", {
@@ -5280,10 +5299,13 @@ function Anchorline:CreateWindow(options)
 	})
 	self.Header = header
 	local headerLine = new("Frame", {
+		Name = "HeaderDivider",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 24, 1, 0),
 		Size = UDim2.new(1, -48, 0, 1),
 		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		Visible = false,
 		Parent = header
 	})
 	self:_track(headerLine, {BackgroundColor3 = "StrokeSoft"})
@@ -5354,10 +5376,13 @@ function Anchorline:CreateWindow(options)
 	})
 	self.Sidebar = sidebar
 	local sidebarLine = new("Frame", {
+		Name = "SidebarDivider",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
 		Size = UDim2.new(0, 1, 1, 0),
 		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		Visible = false,
 		Parent = sidebar
 	})
 	self:_track(sidebarLine, {BackgroundColor3 = "StrokeSoft"})
@@ -8532,12 +8557,31 @@ local function anchorlineRenderFixWindow(window)
 	window.Root.BackgroundTransparency = 0
 	window.Root.GroupTransparency = 0
 	window.Root.Visible = true
+	for _, dividerName in ipairs({"HeaderDivider", "SidebarDivider"}) do
+		local divider = window.Root:FindFirstChild(dividerName, true)
+		if divider and divider:IsA("GuiObject") then
+			divider.Visible = false
+			divider.BackgroundTransparency = 1
+		end
+	end
 	if window.Header then
 		window.Header.Visible = true
 		window.Header.ZIndex = 1
+		for _, child in ipairs(window.Header:GetChildren()) do
+			if child:IsA("Frame") and (child.Name == "HeaderDivider" or child.AbsoluteSize.Y <= 2) then
+				child.Visible = false
+				child.BackgroundTransparency = 1
+			end
+		end
 	end
 	if window.Sidebar then
 		window.Sidebar.ZIndex = 1
+		for _, child in ipairs(window.Sidebar:GetChildren()) do
+			if child:IsA("Frame") and (child.Name == "SidebarDivider" or child.AbsoluteSize.X <= 2) then
+				child.Visible = false
+				child.BackgroundTransparency = 1
+			end
+		end
 	end
 	if window.Content then
 		window.Content.ZIndex = 1
