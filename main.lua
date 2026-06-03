@@ -8627,4 +8627,127 @@ function Window:_selectTab(tab)
 	return result
 end
 
+-- ANCHORLINE_FINAL_SHELL_FIX_2026_06_03
+-- Removes duplicate-looking shell layers, hard-cleans stale Anchorline ScreenGuis,
+-- and keeps the window as one opaque shell instead of stacking panels behind the header.
+local function anchorlineFinalParents()
+	local parents = {}
+	if CoreGui then parents[#parents + 1] = CoreGui end
+	local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then parents[#parents + 1] = playerGui end
+	return parents
+end
+
+local function anchorlineFinalLooksLikeAnchorlineGui(gui)
+	if not gui or not gui:IsA("ScreenGui") then return false end
+	local name = tostring(gui.Name or ""):lower()
+	if name:find("anchorline", 1, true) then return true end
+	if gui:GetAttribute("AnchorlineUI") or gui:GetAttribute("AnchorlineScreenGui") then return true end
+	local root = gui:FindFirstChild("Window")
+	if root and root:IsA("GuiObject") then
+		local title = root:FindFirstChild("Title", true)
+		if title and title:IsA("TextLabel") and tostring(title.Text or ""):lower():find("anchorline", 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function anchorlineFinalHardCleanup()
+	for _, parent in ipairs(anchorlineFinalParents()) do
+		for _, child in ipairs(parent:GetChildren()) do
+			if anchorlineFinalLooksLikeAnchorlineGui(child) then
+				pcall(function() child:Destroy() end)
+			end
+		end
+	end
+end
+
+local function anchorlineFinalHideShellArtifacts(window)
+	if not window or not window.Root then return window end
+	window.FrostedGlass = false
+	window.GlassTransparency = 0
+	window.BlurSize = 0
+	if window._setBackgroundBlur then pcall(function() window:_setBackgroundBlur(false) end) end
+
+	window.Root.BackgroundTransparency = 0
+	window.Root.GroupTransparency = 0
+	window.Root.ClipsDescendants = true
+	anchorlineVisibleApplyCorner(window.Root, 10)
+	if window._track then window:_track(window.Root, {BackgroundColor3 = "Panel"}) end
+
+	local rootStroke = window.Root:FindFirstChildOfClass("UIStroke")
+	if rootStroke then
+		rootStroke.Transparency = 0
+		rootStroke.Thickness = 1
+		if window._track then window:_track(rootStroke, {Color = "Stroke"}) end
+	end
+
+	-- The header/sidebar/content are layout regions, not separate visible shells.
+	-- Keeping them transparent removes the rounded rectangle/panel that appeared behind the top bar.
+	for _, panel in ipairs({window.Header, window.Sidebar, window.Content, window.Pages}) do
+		if panel and panel:IsA("GuiObject") then
+			panel.BackgroundTransparency = 1
+			panel.ClipsDescendants = panel == window.Pages
+		end
+	end
+
+	-- Hide old divider/construction lines that can sit behind the redesigned shell.
+	for _, descendant in ipairs(window.Root:GetDescendants()) do
+		if descendant:IsA("GuiObject") then
+			local name = tostring(descendant.Name or "")
+			if name == "HeaderDivider" or name == "SidebarDivider" or name == "ContentDivider" then
+				descendant.Visible = false
+				descendant.BackgroundTransparency = 1
+			elseif (name:lower():find("shadow", 1, true) or name:lower():find("backdrop", 1, true) or name:lower():find("depth", 1, true)) then
+				descendant.Visible = false
+				descendant.BackgroundTransparency = 1
+			end
+		end
+	end
+
+	anchorlineRenderFixNormalizeZIndex(window.Root)
+	if window._refreshPageCanvases then pcall(function() window:_refreshPageCanvases() end) end
+	return window
+end
+
+local anchorlineFinalOriginalCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	anchorlineFinalHardCleanup()
+	local window = anchorlineFinalOriginalCreateWindow(self, options)
+	if window and window.Gui then
+		pcall(function()
+			window.Gui.Name = "Anchorline_UI"
+			window.Gui:SetAttribute("AnchorlineUI", true)
+			window.Gui:SetAttribute("AnchorlineBuild", "final-shell-fix")
+		end)
+	end
+	anchorlineFinalHideShellArtifacts(window)
+	task.defer(function()
+		if window and window.Root and window.Root.Parent then
+			anchorlineFinalHideShellArtifacts(window)
+		end
+	end)
+	return window
+end
+
+local anchorlineFinalOriginalSetTheme = Window.SetTheme
+function Window:SetTheme(theme)
+	local result = anchorlineFinalOriginalSetTheme(self, theme)
+	anchorlineFinalHideShellArtifacts(self)
+	return result
+end
+
+local anchorlineFinalOriginalMinimize = Window.Minimize
+function Window:Minimize(value)
+	local result = anchorlineFinalOriginalMinimize(self, value)
+	anchorlineFinalHideShellArtifacts(self)
+	if self.Minimized and self.ResizeHandle then self.ResizeHandle.Visible = false end
+	return result
+end
+
+Anchorline.Version = "4.5.0-final-shell-fix"
+Anchorline.Build = "no-duplicate-shell"
+
+
 return Anchorline
