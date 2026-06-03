@@ -1,7 +1,7 @@
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
-Anchorline.Version = "4.0.0"
+Anchorline.Version = "4.1.0"
 Anchorline.Flags = {}
 Anchorline.Windows = setmetatable({}, {__mode = "v"})
 Anchorline.IconStyle = "Lucide"
@@ -536,6 +536,52 @@ local function getGlobalLucideProvider()
 	return nil
 end
 
+
+-- Direct Lucide provider loader. This follows the same structural idea used by mature UI libs:
+-- prefer a real icon module/API before falling back to hand-drawn placeholders.
+local directLucideProvider = nil
+local directLucideLoadAttempted = false
+local directLucideSource = "https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua"
+
+local function loadDirectLucideProvider()
+	if directLucideLoadAttempted then
+		return directLucideProvider
+	end
+	directLucideLoadAttempted = true
+	if type(loadstring) ~= "function" then
+		return nil
+	end
+	local content
+	local ok, result = pcall(function()
+		return game:HttpGet(directLucideSource)
+	end)
+	if ok and type(result) == "string" and #result > 0 then
+		content = result
+	end
+	if not content then
+		local requestFunction = (syn and syn.request) or (http and http.request) or http_request or request
+		if type(requestFunction) == "function" then
+			local requestOk, response = pcall(requestFunction, {Url = directLucideSource, Method = "GET"})
+			if requestOk and type(response) == "table" and type(response.Body) == "string" and #response.Body > 0 then
+				content = response.Body
+			end
+		end
+	end
+	if not content then
+		return nil
+	end
+	local chunkOk, chunk = pcall(loadstring, content)
+	if not chunkOk or type(chunk) ~= "function" then
+		return nil
+	end
+	local runOk, provider = pcall(chunk)
+	if runOk and providerHasLucideApi(provider) then
+		directLucideProvider = provider
+		return provider
+	end
+	return nil
+end
+
 local function findModuleByPath(root, segments)
 	local current = root
 	for _, segment in ipairs(segments) do
@@ -561,6 +607,12 @@ local function findLucideProvider(explicitProvider)
 	end
 	if providerHasLucideApi(Anchorline.IconProvider) then
 		return Anchorline.IconProvider
+	end
+	local directProvider = loadDirectLucideProvider()
+	if directProvider then
+		Anchorline.LucideProvider = directProvider
+		Anchorline.IconProvider = directProvider
+		return directProvider
 	end
 	local globalProvider = getGlobalLucideProvider()
 	if globalProvider then
@@ -4190,7 +4242,11 @@ end
 
 function Window:FitContent(animated)
 	self._manualSizeLocked = false
-	return self:SmartResize(animated ~= false)
+	local previous = self.SmartResizeEnabled
+	self.SmartResizeEnabled = true
+	self:SmartResize(animated ~= false)
+	self.SmartResizeEnabled = previous
+	return self
 end
 
 function Window:Notify(options)
@@ -5047,7 +5103,7 @@ function Anchorline:CreateWindow(options)
 	self.Width = tonumber(options.Width) or 780
 	self.Height = tonumber(options.Height) or 520
 	self.SidebarWidth = tonumber(options.SidebarWidth) or 188
-	self.SmartResizeEnabled = options.SmartResize ~= false
+	self.SmartResizeEnabled = options.SmartResize == true
 	self.SmartViewportMargin = tonumber(options.SmartViewportMargin) or 44
 	self.SmartContentMinWidth = tonumber(options.SmartContentMinWidth) or 390
 	self.ScrollBottomPadding = tonumber(options.ScrollBottomPadding) or 64
@@ -5097,6 +5153,10 @@ function Anchorline:CreateWindow(options)
 		Parent = gui
 	}, {corner(25)})
 	self.Root = root
+	self.RootScale = new("UIScale", {
+		Scale = tonumber(options.Scale or options.DPIScale or Anchorline.DPIScale) or 1,
+		Parent = root
+	})
 	self:_track(root, {BackgroundColor3 = "Background"})
 	local rootStroke = stroke(getThemeValue(self, "Stroke"), 1, 0)
 	rootStroke.Parent = root
@@ -6055,9 +6115,10 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 	local asset = window:_resolveIcon(icon)
 	if asset then
 		local image = new("ImageLabel", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
 			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(size, size),
-			Position = UDim2.fromOffset(0, 0),
+			Position = UDim2.fromScale(0.5, 0.5),
 			ScaleType = Enum.ScaleType.Fit,
 			ImageColor3 = color or getThemeValue(window, "Accent"),
 			Parent = parent
@@ -6066,14 +6127,17 @@ local function anchorlineVisualIcon(window, parent, icon, size, color, cutoutCol
 		return {Root = image, Shapes = {image}}
 	end
 	local holder = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size, size),
 		Parent = parent
 	})
 	local scale = math.max(size / 20, 0.8)
 	local inner = new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(math.floor((size - 20) / 2), math.floor((size - 20) / 2)),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(20, 20),
 		Parent = holder
 	})
@@ -6151,7 +6215,7 @@ function Tab:CreateBanner(options)
 	local rail = new("Frame", {Position = UDim2.fromOffset(0, 0), Size = UDim2.fromOffset(5, height), BackgroundColor3 = accentColor, BorderSizePixel = 0, Parent = frame}, {corner(3)})
 	local iconBox = new("Frame", {Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(42, 42), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Parent = frame}, {corner(13), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
 	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
-	anchorlineVisualIcon(window, iconBox, options.Icon or options.Image or options.Type or "info", 22, accentColor, iconBox.BackgroundColor3).Root.Position = UDim2.fromOffset(10, 10)
+	anchorlineVisualIcon(window, iconBox, options.Icon or options.Image or options.Type or "info", 22, accentColor, iconBox.BackgroundColor3)
 	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(72, 18), Size = UDim2.new(1, action and -214 or -92, 0, 22), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
 	local bodyHeight = math.max(34, measureWrappedText(bodyText, 13, Enum.Font.Gotham, math.max(frame.AbsoluteSize.X - (action and 260 or 120), 260)))
@@ -6189,7 +6253,7 @@ function Tab:CreateEmptyState(options)
 	if layout then layout:Destroy() end
 	local iconCircle = new("Frame", {AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 20), Size = UDim2.fromOffset(48, 48), BackgroundTransparency = window.FrostedGlass and 0.12 or 0, Parent = frame}, {corner(18), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
 	window:_track(iconCircle, {BackgroundColor3 = "AccentSoft"})
-	anchorlineVisualIcon(window, iconCircle, options.Icon or "folder", 24, getThemeValue(window, "Accent"), iconCircle.BackgroundColor3).Root.Position = UDim2.fromOffset(12, 12)
+	anchorlineVisualIcon(window, iconCircle, options.Icon or "folder", 24, getThemeValue(window, "Accent"), iconCircle.BackgroundColor3)
 	local title = new("TextLabel", {BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 78), Size = UDim2.new(1, -40, 0, 24), Font = Enum.Font.GothamBold, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Center, Text = titleText, Parent = frame})
 	window:_track(title, {TextColor3 = "Text"})
 	local body = new("TextLabel", {BackgroundTransparency = 1, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 106), Size = UDim2.new(1, -72, 0, 40), Font = Enum.Font.Gotham, TextSize = 13, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Top, Text = bodyText, Parent = frame})
@@ -6214,7 +6278,7 @@ function Tab:CreateMetricGrid(options)
 		window:_track(cell, {BackgroundColor3 = "Surface"})
 		local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(32, 32), BackgroundTransparency = window.FrostedGlass and 0.14 or 0, Parent = cell}, {corner(10)})
 		window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
-		anchorlineVisualIcon(window, iconBox, item.Icon or item.Image or "bar-chart", 18, anchorlineKindColor(window, item.Type or item.Status or "Info"), iconBox.BackgroundColor3).Root.Position = UDim2.fromOffset(7, 7)
+		anchorlineVisualIcon(window, iconBox, item.Icon or item.Image or "bar-chart", 18, anchorlineKindColor(window, item.Type or item.Status or "Info"), iconBox.BackgroundColor3)
 		local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 11), Size = UDim2.new(1, -64, 0, 18), Font = Enum.Font.Gotham, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Name or item.Title or item.Label or "Metric"), Parent = cell})
 		window:_track(title, {TextColor3 = "TextMuted"})
 		local value = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 31), Size = UDim2.new(1, -64, 0, 24), Font = Enum.Font.GothamBold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(item.Value or item.Text or "0"), Parent = cell})
@@ -6258,7 +6322,7 @@ function Tab:CreateCardGrid(options)
 		window:_track(button, {BackgroundColor3 = "Surface"})
 		local iconBox = new("Frame", {Position = UDim2.fromOffset(12, 12), Size = UDim2.fromOffset(34, 34), BackgroundTransparency = window.FrostedGlass and 0.16 or 0, Parent = button}, {corner(11)})
 		window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
-		anchorlineVisualIcon(window, iconBox, card.Icon or card.Image or "toolbox", 18, anchorlineKindColor(window, card.Type or card.Status or "Info"), iconBox.BackgroundColor3).Root.Position = UDim2.fromOffset(8, 8)
+		anchorlineVisualIcon(window, iconBox, card.Icon or card.Image or "toolbox", 18, anchorlineKindColor(window, card.Type or card.Status or "Info"), iconBox.BackgroundColor3)
 		local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 12), Size = UDim2.new(1, -70, 0, 18), Font = Enum.Font.GothamMedium, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Text = tostring(card.Title or card.Name or "Card"), Parent = button})
 		window:_track(title, {TextColor3 = "Text"})
 		local body = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(12, 52), Size = UDim2.new(1, -24, 0, 34), Font = Enum.Font.Gotham, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Text = tostring(card.Description or card.Content or card.Text or ""), Parent = button})
@@ -6783,6 +6847,66 @@ function Anchorline:GetMotionScale()
 	return self.MotionScale or 1
 end
 
+
+Anchorline.DPIScale = Anchorline.DPIScale or 1
+
+function Anchorline:SetDPIScale(scale)
+	scale = tonumber(scale) or 1
+	if scale > 10 then
+		scale = scale / 100
+	end
+	scale = math.clamp(scale, 0.55, 1.65)
+	self.DPIScale = scale
+	for _, window in ipairs(self.Windows or {}) do
+		if window and type(window.SetScale) == "function" then
+			window:SetScale(scale)
+		end
+	end
+	return self
+end
+
+function Anchorline:GetDPIScale()
+	return self.DPIScale or 1
+end
+
+function Window:SetScale(scale)
+	scale = tonumber(scale) or 1
+	if scale > 10 then
+		scale = scale / 100
+	end
+	scale = math.clamp(scale, 0.55, 1.65)
+	self.Scale = scale
+	if self.RootScale then
+		tween(self.RootScale, 0.2, {Scale = scale}, Enum.EasingStyle.Quint)
+	elseif self.Root then
+		self.RootScale = new("UIScale", {Scale = scale, Parent = self.Root})
+	end
+	self:RefreshLayout(false)
+	return self
+end
+
+function Window:GetScale()
+	return self.Scale or (self.RootScale and self.RootScale.Scale) or 1
+end
+
+function Anchorline:GetIcon(icon, size)
+	local provider = findLucideProvider(Anchorline.IconProvider or Anchorline.LucideProvider)
+	if provider then
+		local parsed = getLucideAssetFromProvider(provider, icon, size or 48)
+		if parsed then
+			return parsed
+		end
+	end
+	local direct = loadDirectLucideProvider()
+	if direct then
+		local parsed = getLucideAssetFromProvider(direct, icon, size or 48)
+		if parsed then
+			return parsed
+		end
+	end
+	return getBundledLucideAsset and getBundledLucideAsset(icon, size or 48) or nil
+end
+
 local function anchorlineTrackConnection(window, connection)
 	if window and connection and type(connection.Disconnect) == "function" then
 		window._connections[#window._connections + 1] = connection
@@ -6793,7 +6917,9 @@ end
 local function anchorlineMakeIcon(window, parent, icon, size, color, backgroundColor)
 	local holder = new("Frame", {
 		Name = "IconHolder",
+		AnchorPoint = Vector2.new(0.5, 0.5),
 		BackgroundTransparency = 1,
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(size or 24, size or 24),
 		Parent = parent
 	})
