@@ -1,4 +1,3 @@
--- Anchorline clipping fix applied: stat/metric/card content no longer cuts off
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
@@ -8748,6 +8747,165 @@ end
 
 Anchorline.Version = "4.5.0-final-shell-fix"
 Anchorline.Build = "no-duplicate-shell"
+
+
+-- ANCHORLINE_TAB_OUTLINE_ICON_FIX_2026_06_03
+-- Keeps tab strokes inside the sidebar viewport and centers the actual icon art inside the icon box.
+local function anchorlineTabIconSafeSet(object, properties)
+	if not object then return end
+	for property, value in pairs(properties) do
+		pcall(function()
+			object[property] = value
+		end)
+	end
+end
+
+local function anchorlineTabIconCenterGui(guiObject, size)
+	if not guiObject or not guiObject:IsA("GuiObject") then return end
+	anchorlineTabIconSafeSet(guiObject, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		BackgroundTransparency = guiObject.BackgroundTransparency,
+	})
+	if size then
+		pcall(function()
+			guiObject.Size = UDim2.fromOffset(size, size)
+		end)
+	end
+end
+
+local function anchorlineTabIconCenterBox(iconBox)
+	if not iconBox or not iconBox:IsA("GuiObject") then return end
+	iconBox.ClipsDescendants = false
+	for _, child in ipairs(iconBox:GetChildren()) do
+		if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+			anchorlineTabIconCenterGui(child, 20)
+			pcall(function()
+				child.ScaleType = Enum.ScaleType.Fit
+			end)
+		elseif child:IsA("Frame") and (child.Name == "VectorIcon" or child.Name == "IconHolder" or child.Name == "IconRoot") then
+			anchorlineTabIconCenterGui(child, 20)
+			child.ClipsDescendants = false
+			for _, nested in ipairs(child:GetChildren()) do
+				if nested:IsA("ImageLabel") or nested:IsA("ImageButton") then
+					anchorlineTabIconCenterGui(nested, 20)
+					pcall(function() nested.ScaleType = Enum.ScaleType.Fit end)
+				elseif nested:IsA("Frame") and nested.Name == "IconHolder" then
+					anchorlineTabIconCenterGui(nested, 20)
+				end
+			end
+		end
+	end
+end
+
+local function anchorlineFixOneTabOutlineAndIcon(window, tab)
+	if not window or not tab then return end
+	local active = window.ActiveTab == tab
+	if tab.Button and tab.Button:IsA("GuiObject") then
+		tab.Button.ClipsDescendants = false
+		tab.Button.Size = UDim2.new(1, -8, 0, 40)
+		tab.Button.ZIndex = math.max(tab.Button.ZIndex, 8)
+		anchorlineVisibleApplyCorner(tab.Button, 10)
+	end
+	if tab.ButtonStroke then
+		tab.ButtonStroke.Thickness = 1
+		tab.ButtonStroke.Transparency = 0
+		tab.ButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		tab.ButtonStroke.LineJoinMode = Enum.LineJoinMode.Round
+		if window._track then
+			window:_track(tab.ButtonStroke, {Color = active and "Stroke" or "StrokeSoft"})
+		end
+	end
+	if tab.ButtonAccent and tab.ButtonAccent:IsA("GuiObject") then
+		tab.ButtonAccent.ClipsDescendants = false
+		tab.ButtonAccent.Position = UDim2.fromOffset(4, 8)
+		tab.ButtonAccent.Size = active and UDim2.new(0, 4, 1, -16) or UDim2.new(0, 3, 1, -18)
+	end
+	if tab.ButtonIconBox and tab.ButtonIconBox:IsA("GuiObject") then
+		tab.ButtonIconBox.AnchorPoint = Vector2.new(0, 0.5)
+		tab.ButtonIconBox.Position = UDim2.new(0, 18, 0.5, 0)
+		tab.ButtonIconBox.Size = UDim2.fromOffset(32, 32)
+		tab.ButtonIconBox.ZIndex = math.max(tab.ButtonIconBox.ZIndex, 9)
+		anchorlineVisibleApplyCorner(tab.ButtonIconBox, 9)
+		anchorlineTabIconCenterBox(tab.ButtonIconBox)
+	end
+	if tab.ButtonIconImage and tab.ButtonIconImage:IsA("ImageLabel") then
+		anchorlineTabIconCenterGui(tab.ButtonIconImage, 20)
+		tab.ButtonIconImage.ZIndex = math.max(tab.ButtonIconImage.ZIndex, 10)
+		tab.ButtonIconImage.ScaleType = Enum.ScaleType.Fit
+	end
+	if type(tab.ButtonIconShapes) == "table" then
+		for _, shape in ipairs(tab.ButtonIconShapes) do
+			if shape and shape:IsA("GuiObject") then
+				shape.ZIndex = math.max(shape.ZIndex, 10)
+			end
+		end
+	end
+	if tab.ButtonTitle and tab.ButtonTitle:IsA("TextLabel") then
+		tab.ButtonTitle.Position = UDim2.fromOffset(64, 0)
+		tab.ButtonTitle.Size = UDim2.new(1, -74, 1, 0)
+		tab.ButtonTitle.ZIndex = math.max(tab.ButtonTitle.ZIndex, 10)
+	end
+end
+
+local function anchorlineFixTabListOutlines(window)
+	if not window then return end
+	if window.TabList and window.TabList:IsA("ScrollingFrame") then
+		window.TabList.ClipsDescendants = false
+		window.TabList.ScrollBarThickness = 0
+		local safePadding = window.TabList:FindFirstChild("AnchorlineTabSafePadding")
+		if not safePadding then
+			safePadding = Instance.new("UIPadding")
+			safePadding.Name = "AnchorlineTabSafePadding"
+			safePadding.Parent = window.TabList
+		end
+		safePadding.PaddingLeft = UDim.new(0, 4)
+		safePadding.PaddingRight = UDim.new(0, 4)
+		safePadding.PaddingTop = UDim.new(0, 2)
+		safePadding.PaddingBottom = UDim.new(0, 4)
+		local layout = window.TabList:FindFirstChildOfClass("UIListLayout")
+		if layout then
+			layout.Padding = UDim.new(0, 10)
+		end
+	end
+	for _, tab in ipairs(window.Tabs or {}) do
+		anchorlineFixOneTabOutlineAndIcon(window, tab)
+	end
+end
+
+local anchorlineTabIconOriginalStyle = Window._styleTabButton
+function Window:_styleTabButton(tab)
+	local result = anchorlineTabIconOriginalStyle(self, tab)
+	anchorlineFixOneTabOutlineAndIcon(self, tab)
+	return result
+end
+
+local anchorlineTabIconOriginalCreateTab = Window.CreateTab
+function Window:CreateTab(name, icon, description)
+	local tab = anchorlineTabIconOriginalCreateTab(self, name, icon, description)
+	anchorlineFixTabListOutlines(self)
+	task.defer(function()
+		if self and self.Root and self.Root.Parent then
+			anchorlineFixTabListOutlines(self)
+		end
+	end)
+	return tab
+end
+
+local anchorlineTabIconOriginalCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	local window = anchorlineTabIconOriginalCreateWindow(self, options)
+	anchorlineFixTabListOutlines(window)
+	task.defer(function()
+		if window and window.Root and window.Root.Parent then
+			anchorlineFixTabListOutlines(window)
+		end
+	end)
+	return window
+end
+
+Anchorline.Version = "4.5.1-tab-outline-icon-fix"
+Anchorline.Build = "tab-outline-icon-centered"
 
 
 return Anchorline
