@@ -1,3 +1,4 @@
+-- Anchorline clipping fix applied: stat/metric/card content no longer cuts off
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
@@ -9306,5 +9307,197 @@ function Anchorline:Audit()
 	return result
 end
 
+
+
+--// Anchorline 4.6.1 collapsed-tab and K-toggle hotfix
+-- Fixes collapsed sidebar icon placement and removes the duplicate K hide binding.
+Anchorline.Version = "4.6.1-expanded-stable-hotfix"
+Anchorline.Build = "collapsed-icons-single-k-toggle"
+Anchorline.DefaultToggleKey = Enum.KeyCode.K
+
+-- The base window already binds K. The previous expansion added a second K listener,
+-- which made K immediately hide again after showing. Keep this as a compatibility no-op.
+function Window:_ensureAlwaysHideKey()
+	self._anchorlineAlwaysHideKeyBound = true
+	return self
+end
+
+local function anchorlineHotfixCenterIconBox(iconBox, collapsed)
+	if not iconBox or not iconBox:IsA("GuiObject") then return end
+	iconBox.ClipsDescendants = false
+	iconBox.AnchorPoint = Vector2.new(0.5, 0.5)
+	iconBox.Position = UDim2.fromScale(0.5, 0.5)
+	iconBox.Size = UDim2.fromOffset(collapsed and 36 or 34, collapsed and 36 or 34)
+	iconBox.ZIndex = math.max(iconBox.ZIndex, 20)
+	if anchorlineVisibleApplyCorner then
+		anchorlineVisibleApplyCorner(iconBox, 10)
+	end
+	for _, child in ipairs(iconBox:GetChildren()) do
+		if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+			child.AnchorPoint = Vector2.new(0.5, 0.5)
+			child.Position = UDim2.fromScale(0.5, 0.5)
+			child.Size = UDim2.fromOffset(22, 22)
+			child.BackgroundTransparency = 1
+			child.ScaleType = Enum.ScaleType.Fit
+			child.ZIndex = math.max(child.ZIndex, iconBox.ZIndex + 2)
+		elseif child:IsA("Frame") then
+			local lower = tostring(child.Name):lower()
+			if lower:find("icon", 1, true) or lower == "vector" or lower == "vectoricon" or lower == "holder" then
+				child.AnchorPoint = Vector2.new(0.5, 0.5)
+				child.Position = UDim2.fromScale(0.5, 0.5)
+				child.Size = UDim2.fromOffset(22, 22)
+				child.BackgroundTransparency = 1
+				child.ClipsDescendants = false
+				child.ZIndex = math.max(child.ZIndex, iconBox.ZIndex + 1)
+				for _, nested in ipairs(child:GetDescendants()) do
+					if nested:IsA("ImageLabel") or nested:IsA("ImageButton") then
+						nested.AnchorPoint = Vector2.new(0.5, 0.5)
+						nested.Position = UDim2.fromScale(0.5, 0.5)
+						nested.Size = UDim2.fromOffset(22, 22)
+						nested.BackgroundTransparency = 1
+						nested.ScaleType = Enum.ScaleType.Fit
+						nested.ZIndex = math.max(nested.ZIndex, iconBox.ZIndex + 2)
+					elseif nested:IsA("GuiObject") then
+						nested.ZIndex = math.max(nested.ZIndex, iconBox.ZIndex + 2)
+					end
+				end
+			elseif not child:FindFirstChildOfClass("UICorner") and not child:FindFirstChildOfClass("UIStroke") then
+				child.ZIndex = math.max(child.ZIndex, iconBox.ZIndex + 2)
+			end
+		end
+	end
+end
+
+local function anchorlineHotfixTab(tab, window)
+	if not tab or not window or not tab.Button then return end
+	local collapsed = window.SidebarCollapsed == true
+	tab.Button.ClipsDescendants = false
+	tab.Button.ZIndex = math.max(tab.Button.ZIndex, 12)
+	if collapsed then
+		tab.Button.Size = UDim2.fromOffset(48, 44)
+		tab.Button.Position = UDim2.fromOffset(0, 0)
+		if tab.ButtonTitle then
+			tab.ButtonTitle.Visible = false
+		end
+		if tab.ButtonIconBox then
+			anchorlineHotfixCenterIconBox(tab.ButtonIconBox, true)
+		end
+		if tab.ButtonAccent then
+			tab.ButtonAccent.AnchorPoint = Vector2.new(0, 0.5)
+			tab.ButtonAccent.Position = UDim2.new(0, 4, 0.5, 0)
+			tab.ButtonAccent.Size = window.ActiveTab == tab and UDim2.new(0, 4, 1, -16) or UDim2.new(0, 3, 1, -20)
+			tab.ButtonAccent.ZIndex = math.max(tab.ButtonAccent.ZIndex, tab.Button.ZIndex + 2)
+		end
+	else
+		tab.Button.Size = UDim2.new(1, -8, 0, 44)
+		if tab.ButtonTitle then
+			tab.ButtonTitle.Visible = true
+			tab.ButtonTitle.Position = UDim2.fromOffset(66, 0)
+			tab.ButtonTitle.Size = UDim2.new(1, -78, 1, 0)
+			tab.ButtonTitle.ZIndex = math.max(tab.ButtonTitle.ZIndex, tab.Button.ZIndex + 2)
+		end
+		if tab.ButtonIconBox then
+			tab.ButtonIconBox.AnchorPoint = Vector2.new(0, 0.5)
+			tab.ButtonIconBox.Position = UDim2.new(0, 18, 0.5, 0)
+			anchorlineHotfixCenterIconBox(tab.ButtonIconBox, false)
+			tab.ButtonIconBox.AnchorPoint = Vector2.new(0, 0.5)
+			tab.ButtonIconBox.Position = UDim2.new(0, 18, 0.5, 0)
+		end
+		if tab.ButtonAccent then
+			tab.ButtonAccent.AnchorPoint = Vector2.new(0, 0.5)
+			tab.ButtonAccent.Position = UDim2.new(0, 4, 0.5, 0)
+			tab.ButtonAccent.Size = window.ActiveTab == tab and UDim2.new(0, 4, 1, -16) or UDim2.new(0, 3, 1, -20)
+			tab.ButtonAccent.ZIndex = math.max(tab.ButtonAccent.ZIndex, tab.Button.ZIndex + 2)
+		end
+	end
+	if tab.ButtonStroke then
+		tab.ButtonStroke.Transparency = 0
+		tab.ButtonStroke.Thickness = 1
+		tab.ButtonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	end
+	if tab.ButtonIconImage then
+		tab.ButtonIconImage.AnchorPoint = Vector2.new(0.5, 0.5)
+		tab.ButtonIconImage.Position = UDim2.fromScale(0.5, 0.5)
+		tab.ButtonIconImage.Size = UDim2.fromOffset(22, 22)
+		tab.ButtonIconImage.ScaleType = Enum.ScaleType.Fit
+		tab.ButtonIconImage.ZIndex = math.max(tab.ButtonIconImage.ZIndex, 24)
+	end
+end
+
+local function anchorlineHotfixSidebarTabs(window)
+	if not window then return end
+	if window.TabList and window.TabList:IsA("ScrollingFrame") then
+		window.TabList.ClipsDescendants = false
+		window.TabList.ScrollBarThickness = 0
+		local pad = window.TabList:FindFirstChild("AnchorlineCollapsedTabPadding")
+		if not pad then
+			pad = Instance.new("UIPadding")
+			pad.Name = "AnchorlineCollapsedTabPadding"
+			pad.Parent = window.TabList
+		end
+		if window.SidebarCollapsed then
+			pad.PaddingLeft = UDim.new(0, 7)
+			pad.PaddingRight = UDim.new(0, 7)
+		else
+			pad.PaddingLeft = UDim.new(0, 4)
+			pad.PaddingRight = UDim.new(0, 4)
+		end
+		pad.PaddingTop = UDim.new(0, 6)
+		pad.PaddingBottom = UDim.new(0, 8)
+		local layout = window.TabList:FindFirstChildOfClass("UIListLayout")
+		if layout then
+			layout.HorizontalAlignment = window.SidebarCollapsed and Enum.HorizontalAlignment.Center or Enum.HorizontalAlignment.Left
+			layout.Padding = UDim.new(0, 10)
+		end
+	end
+	for _, tab in ipairs(window.Tabs or {}) do
+		anchorlineHotfixTab(tab, window)
+	end
+end
+
+local anchorlineHotfixOriginalStyleTabButton = Window._styleTabButton
+function Window:_styleTabButton(tab)
+	local result = anchorlineHotfixOriginalStyleTabButton(self, tab)
+	anchorlineHotfixTab(tab, self)
+	return result
+end
+
+local anchorlineHotfixOriginalCollapseSidebar = Window.CollapseSidebar
+function Window:CollapseSidebar(value)
+	local result = anchorlineHotfixOriginalCollapseSidebar(self, value)
+	anchorlineHotfixSidebarTabs(self)
+	task.defer(function()
+		if self and self.Root and self.Root.Parent then
+			anchorlineHotfixSidebarTabs(self)
+		end
+	end)
+	return result
+end
+
+local anchorlineHotfixOriginalCreateTab = Window.CreateTab
+function Window:CreateTab(name, icon, description)
+	local tab = anchorlineHotfixOriginalCreateTab(self, name, icon, description)
+	anchorlineHotfixSidebarTabs(self)
+	return tab
+end
+
+local anchorlineHotfixOriginalCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	options = options or {}
+	options.ToggleKey = Enum.KeyCode.K
+	options.HideKey = Enum.KeyCode.K
+	local window = anchorlineHotfixOriginalCreateWindow(self, options)
+	if window then
+		-- Do not bind a second K listener here. The native window binding handles it once.
+		window._anchorlineAlwaysHideKeyBound = true
+		anchorlineHotfixSidebarTabs(window)
+		task.defer(function()
+			if window and window.Root and window.Root.Parent then
+				anchorlineHotfixSidebarTabs(window)
+			end
+		end)
+	end
+	return window
+end
 
 return Anchorline
