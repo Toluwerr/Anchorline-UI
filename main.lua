@@ -8908,4 +8908,403 @@ Anchorline.Version = "4.5.1-tab-outline-icon-fix"
 Anchorline.Build = "tab-outline-icon-centered"
 
 
+--// Anchorline stable expansion + safety pass
+-- This patch keeps the existing visual direction and adds safer rendering, centered icon repair,
+-- default K hide support, and additional reusable visual components.
+
+Anchorline.Version = "4.6.0-expanded-stable"
+Anchorline.Build = "expanded-stable-hardened"
+Anchorline.Security = Anchorline.Security or {
+	CallbackIsolation = true,
+	PreventDuplicateGui = true,
+	SafeServiceLookup = true,
+	NoBlur = true,
+}
+Anchorline.DefaultToggleKey = Enum.KeyCode.K
+
+local function anchorlineIsGuiObject(value)
+	return typeof(value) == "Instance" and value:IsA("GuiObject")
+end
+
+local function anchorlineSetZRecursive(root, baseZ)
+	if not root then return end
+	baseZ = tonumber(baseZ) or 1
+	if anchorlineIsGuiObject(root) then
+		root.ZIndex = math.max(root.ZIndex, baseZ)
+	end
+	for _, child in ipairs(root:GetChildren()) do
+		if anchorlineIsGuiObject(child) then
+			child.ZIndex = math.max(child.ZIndex, baseZ + 1)
+			anchorlineSetZRecursive(child, child.ZIndex)
+		end
+	end
+end
+
+local function anchorlineCenterImageLabel(imageLabel, size)
+	if not imageLabel or not imageLabel:IsA("ImageLabel") then return end
+	imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	imageLabel.Position = UDim2.fromScale(0.5, 0.5)
+	imageLabel.BackgroundTransparency = 1
+	imageLabel.ScaleType = Enum.ScaleType.Fit
+	if tonumber(size) then
+		imageLabel.Size = UDim2.fromOffset(size, size)
+	elseif imageLabel.Size.X.Offset <= 0 or imageLabel.Size.Y.Offset <= 0 then
+		imageLabel.Size = UDim2.fromScale(0.72, 0.72)
+	end
+end
+
+local function anchorlineCenterIconTree(root)
+	if not root then return end
+	local rootName = tostring(root.Name or ""):lower()
+	local looksLikeIcon = rootName:find("icon", 1, true) ~= nil or rootName:find("avatar", 1, true) ~= nil
+	if looksLikeIcon and anchorlineIsGuiObject(root) then
+		root.AnchorPoint = root.AnchorPoint == Vector2.zero and Vector2.new(0.5, 0.5) or root.AnchorPoint
+	end
+	for _, descendant in ipairs(root:GetDescendants()) do
+		if descendant:IsA("ImageLabel") then
+			local parentName = tostring(descendant.Parent and descendant.Parent.Name or ""):lower()
+			local name = tostring(descendant.Name or ""):lower()
+			if name:find("icon", 1, true) or parentName:find("icon", 1, true) or parentName:find("avatar", 1, true) then
+				anchorlineCenterImageLabel(descendant)
+			end
+		elseif descendant:IsA("Frame") then
+			local name = tostring(descendant.Name or ""):lower()
+			if name:find("iconholder", 1, true) or name == "icon" or name:find("iconroot", 1, true) then
+				descendant.AnchorPoint = Vector2.new(0.5, 0.5)
+				if descendant.Position.X.Scale == 0 and descendant.Position.X.Offset <= 2 and descendant.Position.Y.Offset <= 2 then
+					descendant.Position = UDim2.fromScale(0.5, 0.5)
+				end
+			end
+		end
+	end
+end
+
+local function anchorlineHardenLabel(label)
+	if not label or not label:IsA("TextLabel") then return end
+	label.TextTruncate = Enum.TextTruncate.None
+	label.TextWrapped = true
+	if label.Size.Y.Offset <= 22 and label.TextBounds.Y > label.AbsoluteSize.Y then
+		label.AutomaticSize = Enum.AutomaticSize.Y
+		label.Size = UDim2.new(label.Size.X.Scale, label.Size.X.Offset, 0, 0)
+	end
+end
+
+local function anchorlineEnsureScroller(scroller)
+	if not scroller or not scroller:IsA("ScrollingFrame") then return end
+	scroller.ClipsDescendants = true
+	scroller.ScrollingDirection = Enum.ScrollingDirection.Y
+	scroller.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroller.ScrollBarThickness = math.max(4, scroller.ScrollBarThickness)
+	scroller.Active = true
+	local layout = scroller:FindFirstChildOfClass("UIListLayout")
+	if layout and not scroller:GetAttribute("AnchorlineCanvasBound") then
+		scroller:SetAttribute("AnchorlineCanvasBound", true)
+		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if scroller and scroller.Parent then
+				scroller.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 36)
+			end
+		end)
+		scroller.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 36)
+	end
+end
+
+local function anchorlineDisableBlurForWindow(window)
+	if window and window.Blur then
+		pcall(function() window.Blur:Destroy() end)
+		window.Blur = nil
+	end
+	if Lighting then
+		for _, child in ipairs(Lighting:GetChildren()) do
+			local name = tostring(child.Name):lower()
+			if child:IsA("BlurEffect") and name:find("anchorline", 1, true) then
+				pcall(function() child:Destroy() end)
+			end
+		end
+	end
+end
+
+function Window:ForceRenderRepair()
+	anchorlineDisableBlurForWindow(self)
+	if self.Root then
+		self.Root.BackgroundTransparency = 0
+		self.Root.ClipsDescendants = true
+		anchorlineSetZRecursive(self.Root, math.max(10, self.Root.ZIndex))
+		anchorlineCenterIconTree(self.Root)
+		for _, descendant in ipairs(self.Root:GetDescendants()) do
+			if descendant:IsA("ScrollingFrame") then
+				anchorlineEnsureScroller(descendant)
+			elseif descendant:IsA("TextLabel") then
+				anchorlineHardenLabel(descendant)
+			elseif descendant:IsA("Frame") then
+				local name = tostring(descendant.Name or ""):lower()
+				if name:find("grid", 1, true) or name:find("holder", 1, true) or name:find("card", 1, true) then
+					descendant.ClipsDescendants = false
+				end
+			end
+		end
+	end
+	if self.Gui then
+		for _, descendant in ipairs(self.Gui:GetChildren()) do
+			local name = tostring(descendant.Name or ""):lower()
+			if name:find("overlay", 1, true) or name:find("notification", 1, true) or name:find("palette", 1, true) then
+				if anchorlineIsGuiObject(descendant) then
+					descendant.ClipsDescendants = false
+					descendant.ZIndex = math.max(descendant.ZIndex, 900)
+					anchorlineSetZRecursive(descendant, descendant.ZIndex)
+				end
+			end
+		end
+	end
+	if type(self.RefreshLayout) == "function" then
+		pcall(function() self:RefreshLayout(false) end)
+	end
+	return self
+end
+
+function Window:_ensureAlwaysHideKey()
+	if self._anchorlineAlwaysHideKeyBound then return self end
+	self._anchorlineAlwaysHideKeyBound = true
+	local connection = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed or isTyping() then return end
+		if input.KeyCode == Enum.KeyCode.K then
+			if type(self.Toggle) == "function" then
+				self:Toggle()
+			elseif self.Root then
+				self.Root.Visible = not self.Root.Visible
+			end
+		end
+	end)
+	if self._connections then
+		self._connections[#self._connections + 1] = connection
+	end
+	return self
+end
+
+local anchorlineExpandedOriginalCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	options = options or {}
+	options.ToggleKey = Enum.KeyCode.K
+	options.ToggleKeybind = Enum.KeyCode.K
+	options.HideKey = Enum.KeyCode.K
+	options.FrostedGlass = false
+	options.Blur = false
+	options.SmartResize = false
+	local window = anchorlineExpandedOriginalCreateWindow(self, options)
+	if window then
+		pcall(function() window:_ensureAlwaysHideKey() end)
+		pcall(function() window:ForceRenderRepair() end)
+		task.defer(function()
+			if window and window.Root and window.Root.Parent then
+				pcall(function() window:ForceRenderRepair() end)
+			end
+		end)
+	end
+	return window
+end
+
+local anchorlineExpandedOriginalCreateTab = Window.CreateTab
+function Window:CreateTab(name, icon, description)
+	local tab = anchorlineExpandedOriginalCreateTab(self, name, icon, description)
+	pcall(function() self:ForceRenderRepair() end)
+	return tab
+end
+
+local function anchorlineCreateVisualCard(tab, options, minimumHeight)
+	options = options or {}
+	local window = tab.Window
+	local frame = new("Frame", {
+		Name = options.Name or "AnchorlineVisualCard",
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 0,
+		ClipsDescendants = false,
+		Parent = tab.Page
+	}, {corner(options.Radius or 12), stroke(getThemeValue(window, "StrokeSoft"), 1, 0), padding(16, 16, 14, 14)})
+	window:_track(frame, {BackgroundColor3 = options.Surface or "Surface"})
+	frame:SetAttribute("AnchorlineMinHeight", minimumHeight or 92)
+	local layout = listLayout(Enum.FillDirection.Vertical, options.Gap or 8, Enum.HorizontalAlignment.Left)
+	layout.Parent = frame
+	return frame, layout
+end
+
+function Tab:CreateStatusBanner(options)
+	options = options or {}
+	local frame = anchorlineCreateVisualCard(self, {Name = "StatusBanner", Surface = "Surface", Radius = 12, Gap = 6}, 96)
+	local window = self.Window
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 46), Parent = frame})
+	local iconBox = new("Frame", {Name = "IconBox", Position = UDim2.fromOffset(0, 2), Size = UDim2.fromOffset(42, 42), BackgroundTransparency = 0, Parent = row}, {corner(10)})
+	window:_track(iconBox, {BackgroundColor3 = options.Type == "Error" and "Danger" or options.Type == "Warning" and "Warning" or options.Type == "Success" and "Success" or "AccentSoft"})
+	anchorlineMakeIcon(window, iconBox, options.Icon or "info", 22, options.IconColor or getThemeValue(window, "Accent"), getThemeValue(window, "Surface"))
+	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 0), Size = UDim2.new(1, -170, 0, 24), Font = Enum.Font.GothamBold, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Title or "Status"), Parent = row})
+	window:_track(title, {TextColor3 = "Text"})
+	local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(54, 24), Size = UDim2.new(1, -170, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextWrapped = true, TextTruncate = Enum.TextTruncate.None, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Description or options.Content or ""), Parent = row})
+	window:_track(desc, {TextColor3 = "TextMuted"})
+	if options.Badge then
+		local badge = new("TextLabel", {AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 4), Size = UDim2.fromOffset(112, 30), Font = Enum.Font.GothamMedium, TextSize = 12, Text = tostring(options.Badge), Parent = row}, {corner(9), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+		window:_track(badge, {BackgroundColor3 = "AccentSoft", TextColor3 = "Accent"})
+	end
+	self.Elements[#self.Elements + 1] = frame
+	pcall(function() window:ForceRenderRepair() end)
+	return frame
+end
+
+function Tab:CreateNotice(options)
+	options = options or {}
+	return self:CreateStatusBanner({
+		Title = options.Title or options.Name or "Notice",
+		Description = options.Description or options.Content or options.Text or "",
+		Icon = options.Icon or "info",
+		Badge = options.Badge,
+		Type = options.Type or "Info"
+	})
+end
+
+function Tab:CreateCommandCard(options)
+	options = options or {}
+	local window = self.Window
+	local frame = anchorlineCreateVisualCard(self, {Name = "CommandCard", Surface = "Surface", Radius = 12}, 90)
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 52), Parent = frame})
+	local iconBox = new("Frame", {Name = "IconBox", Position = UDim2.fromOffset(0, 4), Size = UDim2.fromOffset(44, 44), Parent = row}, {corner(10)})
+	window:_track(iconBox, {BackgroundColor3 = "AccentSoft"})
+	anchorlineMakeIcon(window, iconBox, options.Icon or "terminal", 22, getThemeValue(window, "Accent"), getThemeValue(window, "Surface"))
+	local title = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 2), Size = UDim2.new(1, -188, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBold, TextSize = 15, Text = tostring(options.Title or options.Name or "Command"), Parent = row})
+	window:_track(title, {TextColor3 = "Text"})
+	local desc = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromOffset(56, 27), Size = UDim2.new(1, -188, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.Gotham, TextSize = 13, Text = tostring(options.Description or ""), Parent = row})
+	window:_track(desc, {TextColor3 = "TextMuted"})
+	local button = anchorlineVisualButton(window, row, options.ButtonText or "Run", 112, true, options.Callback or options.Action)
+	button.AnchorPoint = Vector2.new(1, 0.5)
+	button.Position = UDim2.new(1, 0, 0.5, 0)
+	self.Elements[#self.Elements + 1] = frame
+	return frame
+end
+
+function Tab:CreatePillRow(options)
+	options = options or {}
+	local window = self.Window
+	local frame = anchorlineCreateVisualCard(self, {Name = "PillRow", Surface = "Surface", Radius = 12, Gap = 10}, 70)
+	local titleText = options.Title or options.Name
+	if titleText then
+		local title = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(titleText), Parent = frame})
+		window:_track(title, {TextColor3 = "Text"})
+	end
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 32), ClipsDescendants = false, Parent = frame})
+	local layout = listLayout(Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Left)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Parent = row
+	for _, pillText in ipairs(options.Items or options.Values or {}) do
+		local pill = new("TextLabel", {AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 28), Font = Enum.Font.GothamMedium, TextSize = 12, Text = "  " .. tostring(pillText) .. "  ", Parent = row}, {corner(8), stroke(getThemeValue(window, "StrokeSoft"), 1, 0)})
+		window:_track(pill, {BackgroundColor3 = "PanelAlt", TextColor3 = "TextMuted"})
+	end
+	self.Elements[#self.Elements + 1] = frame
+	return frame
+end
+
+function Tab:CreateInspectorTable(options)
+	options = options or {}
+	local window = self.Window
+	local frame = anchorlineCreateVisualCard(self, {Name = "InspectorTable", Surface = "Surface", Radius = 12, Gap = 8}, 100)
+	local title = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Title or options.Name or "Inspector"), Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	for key, value in pairs(options.Rows or options.Items or {}) do
+		local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 28), Parent = frame})
+		local left = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0.42, 0, 1, 0), TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.Gotham, TextSize = 13, Text = tostring(key), Parent = row})
+		window:_track(left, {TextColor3 = "TextMuted"})
+		local right = new("TextLabel", {BackgroundTransparency = 1, Position = UDim2.fromScale(0.42, 0), Size = UDim2.new(0.58, 0, 1, 0), TextXAlignment = Enum.TextXAlignment.Right, Font = Enum.Font.GothamMedium, TextSize = 13, Text = tostring(value), Parent = row})
+		window:_track(right, {TextColor3 = "Text"})
+	end
+	self.Elements[#self.Elements + 1] = frame
+	return frame
+end
+
+function Tab:CreateLogPanel(options)
+	options = options or {}
+	local window = self.Window
+	local frame = anchorlineCreateVisualCard(self, {Name = "LogPanel", Surface = "Surface", Radius = 12, Gap = 8}, 130)
+	local title = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Title or "Log"), Parent = frame})
+	window:_track(title, {TextColor3 = "Text"})
+	local box = new("ScrollingFrame", {Size = UDim2.new(1, 0, 0, tonumber(options.Height) or 120), BackgroundTransparency = 0, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 4, ClipsDescendants = true, Parent = frame}, {corner(10), padding(10, 10, 8, 8)})
+	window:_track(box, {BackgroundColor3 = "PanelAlt"})
+	local layout = listLayout(Enum.FillDirection.Vertical, 4, Enum.HorizontalAlignment.Left)
+	layout.Parent = box
+	local controller = {Frame = frame, Box = box, Lines = {}}
+	function controller:Add(line)
+		local label = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, -4, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextWrapped = true, Font = Enum.Font.Code, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(line), Parent = box})
+		window:_track(label, {TextColor3 = "TextMuted"})
+		self.Lines[#self.Lines + 1] = label
+		return label
+	end
+	function controller:Clear()
+		for _, line in ipairs(self.Lines) do pcall(function() line:Destroy() end) end
+		self.Lines = {}
+	end
+	for _, line in ipairs(options.Lines or {}) do controller:Add(line) end
+	self.Elements[#self.Elements + 1] = frame
+	return controller
+end
+
+function Tab:CreateButtonRow(options)
+	options = options or {}
+	local window = self.Window
+	local frame = anchorlineCreateVisualCard(self, {Name = "ButtonRow", Surface = "Surface", Radius = 12, Gap = 10}, 72)
+	if options.Title or options.Name then
+		local title = new("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, Text = tostring(options.Title or options.Name), Parent = frame})
+		window:_track(title, {TextColor3 = "Text"})
+	end
+	local row = new("Frame", {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 36), Parent = frame})
+	local layout = listLayout(Enum.FillDirection.Horizontal, 8, Enum.HorizontalAlignment.Left)
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Parent = row
+	for _, item in ipairs(options.Buttons or options.Items or {}) do
+		anchorlineVisualButton(window, row, item.Text or item.Name or "Action", item.Width or 110, item.Primary, item.Callback or item.Action)
+	end
+	self.Elements[#self.Elements + 1] = frame
+	return frame
+end
+
+-- CreateElement aliases for the new stable components
+local anchorlineExpandedOriginalCreateElement = Tab.CreateElement
+function Tab:CreateElement(kindOrOptions, maybeOptions)
+	local kind = type(kindOrOptions) == "table" and (kindOrOptions.Type or kindOrOptions.Kind or kindOrOptions.Element) or kindOrOptions
+	local options = type(kindOrOptions) == "table" and kindOrOptions or (maybeOptions or {})
+	kind = tostring(kind or ""):lower():gsub("%s+", "-"):gsub("_", "-")
+	local map = {
+		["status-banner"] = "CreateStatusBanner",
+		["notice"] = "CreateNotice",
+		["command-card"] = "CreateCommandCard",
+		["pill-row"] = "CreatePillRow",
+		["inspector-table"] = "CreateInspectorTable",
+		["property-table"] = "CreateInspectorTable",
+		["log-panel"] = "CreateLogPanel",
+		["button-row"] = "CreateButtonRow",
+		["action-row"] = "CreateButtonRow",
+	}
+	local method = map[kind]
+	if method and self[method] then
+		return self[method](self, options)
+	end
+	return anchorlineExpandedOriginalCreateElement(self, kindOrOptions, maybeOptions)
+end
+
+function Anchorline:Audit()
+	local result = {
+		Version = self.Version,
+		Build = self.Build,
+		Windows = 0,
+		LiveRoots = 0,
+		Issues = {},
+	}
+	for _, window in ipairs(self.Windows or {}) do
+		if window then
+			result.Windows += 1
+			if window.Root and window.Root.Parent then
+				result.LiveRoots += 1
+			else
+				result.Issues[#result.Issues + 1] = "A tracked window has no live root."
+			end
+		end
+	end
+	return result
+end
+
+
 return Anchorline
