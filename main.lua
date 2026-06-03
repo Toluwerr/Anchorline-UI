@@ -1,3 +1,4 @@
+-- Anchorline clipping fix applied: stat/metric/card content no longer cuts off
 local Anchorline = {}
 Anchorline.__index = Anchorline
 Anchorline.Name = "Anchorline UI"
@@ -8225,19 +8226,19 @@ local function anchorlineVisibleStyleWindow(window)
 	if window.Header then
 		window.Header.Visible = true
 		window.Header.BackgroundTransparency = 0
-		window.Header.ZIndex = 6
+		window.Header.ZIndex = 1 -- ANCHORLINE_RENDER_FIX: keep panel behind its children
 		window:_track(window.Header, {BackgroundColor3 = "Panel"})
 	end
 	if window.Sidebar then
 		window.Sidebar.Visible = not window.Minimized
 		window.Sidebar.BackgroundTransparency = 0
-		window.Sidebar.ZIndex = 6
+		window.Sidebar.ZIndex = 1 -- ANCHORLINE_RENDER_FIX: keep panel behind its children
 		window:_track(window.Sidebar, {BackgroundColor3 = "PanelAlt"})
 	end
 	if window.Content then
 		window.Content.Visible = not window.Minimized
 		window.Content.BackgroundTransparency = 0
-		window.Content.ZIndex = 6
+		window.Content.ZIndex = 1 -- ANCHORLINE_RENDER_FIX: keep panel behind its children
 		window:_track(window.Content, {BackgroundColor3 = "Panel"})
 	end
 	if window.Pages then
@@ -8482,5 +8483,104 @@ Tab.CreateNotice = Tab.CreateStatusBanner
 Anchorline.CommonIcons = Anchorline.CommonIcons or {
 	Home = "home", Settings = "settings", Search = "search", Shield = "shield-check", Code = "code", Terminal = "terminal", Bell = "bell", Warning = "alert-triangle", Success = "check-circle", Info = "info", User = "user", Users = "users", Folder = "folder", File = "file-text", Copy = "copy", Trash = "trash-2", Refresh = "refresh-cw", Play = "play", Pause = "pause", Bug = "bug", Rocket = "rocket"
 }
+
+
+-- ANCHORLINE_RENDER_FIX_2026_06_03
+-- Fixes the blank-window bug caused by restyling container frames above their own children.
+local function anchorlineRenderFixNormalizeZIndex(root)
+	if not root then return end
+	local base = root.ZIndex or 1
+	for _, descendant in ipairs(root:GetDescendants()) do
+		if descendant:IsA("GuiObject") then
+			local name = descendant.Name
+			if name == "Header" or name == "Sidebar" or name == "Content" or name == "Pages" then
+				descendant.ZIndex = base + 1
+			elseif name == "ResizeHandle" then
+				descendant.ZIndex = base + 30
+			else
+				descendant.ZIndex = math.max(descendant.ZIndex, base + 2)
+			end
+		elseif descendant:IsA("UIStroke") then
+			descendant.ZIndex = math.max(descendant.ZIndex, base + 3)
+		end
+	end
+end
+
+local function anchorlineRenderFixPage(page)
+	if not page or not page:IsA("ScrollingFrame") then return end
+	page.ClipsDescendants = true
+	page.ScrollingDirection = Enum.ScrollingDirection.Y
+	page.CanvasSize = UDim2.fromOffset(0, 0)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollBarThickness = page.ScrollBarThickness > 0 and page.ScrollBarThickness or 4
+	page.Active = true
+	page.ScrollingEnabled = true
+	local layout = page:FindFirstChildOfClass("UIListLayout")
+	if layout and not page:GetAttribute("AnchorlineRenderFixCanvasBound") then
+		page:SetAttribute("AnchorlineRenderFixCanvasBound", true)
+		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			if page and page.Parent then
+				page.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 36)
+			end
+		end)
+		page.CanvasSize = UDim2.fromOffset(0, layout.AbsoluteContentSize.Y + 36)
+	end
+end
+
+local function anchorlineRenderFixWindow(window)
+	if not window or not window.Root then return window end
+	window.Root.BackgroundTransparency = 0
+	window.Root.GroupTransparency = 0
+	window.Root.Visible = true
+	if window.Header then
+		window.Header.Visible = true
+		window.Header.ZIndex = 1
+	end
+	if window.Sidebar then
+		window.Sidebar.ZIndex = 1
+	end
+	if window.Content then
+		window.Content.ZIndex = 1
+	end
+	if window.Pages then
+		window.Pages.ZIndex = 1
+	end
+	anchorlineRenderFixNormalizeZIndex(window.Root)
+	for _, tab in ipairs(window.Tabs or {}) do
+		anchorlineRenderFixPage(tab.Page)
+	end
+	if window._refreshPageCanvases then
+		pcall(function() window:_refreshPageCanvases() end)
+	end
+	return window
+end
+
+local anchorlineRenderFixOriginalCreateWindow = Anchorline.CreateWindow
+function Anchorline:CreateWindow(options)
+	local window = anchorlineRenderFixOriginalCreateWindow(self, options)
+	anchorlineRenderFixWindow(window)
+	task.defer(function()
+		if window and window.Root and window.Root.Parent then
+			anchorlineRenderFixWindow(window)
+		end
+	end)
+	return window
+end
+
+local anchorlineRenderFixOriginalCreateTab = Window.CreateTab
+function Window:CreateTab(name, icon, description)
+	local tab = anchorlineRenderFixOriginalCreateTab(self, name, icon, description)
+	anchorlineRenderFixPage(tab and tab.Page)
+	anchorlineRenderFixWindow(self)
+	return tab
+end
+
+local anchorlineRenderFixOriginalSelectTab = Window._selectTab
+function Window:_selectTab(tab)
+	local result = anchorlineRenderFixOriginalSelectTab(self, tab)
+	anchorlineRenderFixPage(tab and tab.Page)
+	anchorlineRenderFixWindow(self)
+	return result
+end
 
 return Anchorline
